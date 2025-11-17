@@ -20,6 +20,7 @@ interface IconPickerProps {
   currentIcon: string;
   onSelect: (icon: string) => void;
   onClose: () => void;
+  embedded?: boolean; // If true, render as embedded component instead of modal
 }
 
 const ICONS_PER_PAGE = 48;
@@ -134,7 +135,7 @@ async function loadAllIcons(): Promise<SimpleIcon[]> {
   return iconsCachePromise;
 }
 
-export function IconPicker({ currentIcon, onSelect, onClose }: IconPickerProps) {
+export function IconPicker({ currentIcon, onSelect, onClose, embedded = false }: IconPickerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [customUrl, setCustomUrl] = useState('');
   const [showCustomUrl, setShowCustomUrl] = useState(false);
@@ -243,6 +244,160 @@ export function IconPicker({ currentIcon, onSelect, onClose }: IconPickerProps) 
     setDisplayedCount((prev) => prev + ICONS_PER_PAGE);
   };
 
+  const iconPickerContent = (
+    <>
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setDisplayedCount(ICONS_PER_PAGE);
+            }}
+            placeholder="Search icons (e.g., github, react, figma)..."
+            className="w-full pl-10 pr-3 py-2 border border-input rounded-md bg-background"
+          />
+          {(isLoading || isSearching) && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <Loader2 className="w-4 h-4 text-muted-foreground animate-[spin_1s_linear_infinite]" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {isLoading
+            ? 'Loading icons...'
+            : searchTerm
+            ? `Found ${allIcons.length} icons`
+            : `Showing ${displayedIcons.length} of ${allIcons.length} icons`
+          }
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowCustomUrl(!showCustomUrl)}
+          className="text-xs text-primary hover:underline"
+        >
+          {showCustomUrl ? 'Hide' : 'Use custom URL'}
+        </button>
+      </div>
+
+      {showCustomUrl && (
+        <div className="mb-4 p-3 bg-muted/50 rounded-md">
+          <label className="text-sm font-medium mb-2 block">Custom Icon URL</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={customUrl}
+              onChange={(e) => setCustomUrl(e.target.value)}
+              placeholder="https://example.com/icon.png"
+              className="flex-1 px-3 py-2 border border-input rounded-md bg-background text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleCustomIcon();
+                }
+              }}
+            />
+            <button
+              onClick={handleCustomIcon}
+              disabled={!customUrl}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 text-sm"
+            >
+              Use
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-muted-foreground animate-[spin_1s_linear_infinite]" />
+          </div>
+        ) : displayedIcons.length === 0 ? (
+          <div className="flex items-center justify-center py-12">
+            <p className="text-muted-foreground">
+              {allIcons.length === 0 ? 'No icons loaded. Check console for errors.' : 'No icons found'}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+              {displayedIcons
+                .filter((icon) => icon && icon.slug)
+                .map((icon) => {
+                  const iconUrl = getIconUrl(icon.slug);
+                  const isSelected = currentIcon === iconUrl;
+                  
+                  return (
+                    <button
+                      key={icon.slug}
+                      onClick={() => {
+                        onSelect(iconUrl);
+                        onClose();
+                      }}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors ${
+                        isSelected
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary hover:bg-accent'
+                      }`}
+                      title={icon.title || icon.slug}
+                    >
+                      <div className="w-8 h-8 flex items-center justify-center relative">
+                        <img
+                          src={iconUrl}
+                          alt={icon.title || icon.slug}
+                          className="w-6 h-6 object-contain icon-svg"
+                          style={{ display: 'block', minWidth: '24px', minHeight: '24px' }}
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const fallback = target.nextElementSibling as HTMLElement;
+                            if (fallback) {
+                              fallback.style.display = 'flex';
+                            }
+                          }}
+                        />
+                        <div
+                          className="w-6 h-6 flex items-center justify-center text-xs font-bold"
+                          style={{ display: 'none', position: 'absolute' }}
+                        >
+                          {icon?.slug && icon.slug.length > 0 ? icon.slug.charAt(0).toUpperCase() : '?'}
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-center truncate w-full leading-tight">
+                        {icon.slug || '?'}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+
+            {hasMore && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={handleLoadMore}
+                  className="px-4 py-2 text-sm text-primary hover:bg-accent rounded-md transition-colors"
+                >
+                  Load more icons
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+
+  // If embedded, return the content directly without modal wrapper
+  if (embedded) {
+    return <div className="flex-1 flex flex-col overflow-hidden">{iconPickerContent}</div>;
+  }
+
+  // Otherwise, render as modal with portal
   const modalContent = (
     <div 
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]"
@@ -265,150 +420,7 @@ export function IconPicker({ currentIcon, onSelect, onClose }: IconPickerProps) 
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        <div className="mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setDisplayedCount(ICONS_PER_PAGE);
-              }}
-              placeholder="Search icons (e.g., github, react, figma)..."
-              className="w-full pl-10 pr-3 py-2 border border-input rounded-md bg-background"
-            />
-            {(isLoading || isSearching) && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                <Loader2 className="w-4 h-4 text-muted-foreground animate-[spin_1s_linear_infinite]" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            {isLoading
-              ? 'Loading icons...'
-              : searchTerm
-              ? `Found ${allIcons.length} icons`
-              : `Showing ${displayedIcons.length} of ${allIcons.length} icons`
-            }
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowCustomUrl(!showCustomUrl)}
-            className="text-xs text-primary hover:underline"
-          >
-            {showCustomUrl ? 'Hide' : 'Use custom URL'}
-          </button>
-        </div>
-
-        {showCustomUrl && (
-          <div className="mb-4 p-3 bg-muted/50 rounded-md">
-            <label className="text-sm font-medium mb-2 block">Custom Icon URL</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={customUrl}
-                onChange={(e) => setCustomUrl(e.target.value)}
-                placeholder="https://example.com/icon.png"
-                className="flex-1 px-3 py-2 border border-input rounded-md bg-background text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleCustomIcon();
-                  }
-                }}
-              />
-              <button
-                onClick={handleCustomIcon}
-                disabled={!customUrl}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 text-sm"
-              >
-                Use
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-muted-foreground animate-[spin_1s_linear_infinite]" />
-            </div>
-          ) : displayedIcons.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <p className="text-muted-foreground">
-                {allIcons.length === 0 ? 'No icons loaded. Check console for errors.' : 'No icons found'}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
-                {displayedIcons
-                  .filter((icon) => icon && icon.slug)
-                  .map((icon) => {
-                    const iconUrl = getIconUrl(icon.slug);
-                    const isSelected = currentIcon === iconUrl;
-                    
-                    return (
-                      <button
-                        key={icon.slug}
-                        onClick={() => {
-                          onSelect(iconUrl);
-                          onClose();
-                        }}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors ${
-                          isSelected
-                            ? 'border-primary bg-primary/10'
-                            : 'border-border hover:border-primary hover:bg-accent'
-                        }`}
-                        title={icon.title || icon.slug}
-                      >
-                        <div className="w-8 h-8 flex items-center justify-center relative">
-                          <img
-                            src={iconUrl}
-                            alt={icon.title || icon.slug}
-                            className="w-6 h-6 object-contain icon-svg"
-                            style={{ display: 'block', minWidth: '24px', minHeight: '24px' }}
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const fallback = target.nextElementSibling as HTMLElement;
-                              if (fallback) {
-                                fallback.style.display = 'flex';
-                              }
-                            }}
-                          />
-                          <div
-                            className="w-6 h-6 flex items-center justify-center text-xs font-bold"
-                            style={{ display: 'none', position: 'absolute' }}
-                          >
-                            {icon?.slug && icon.slug.length > 0 ? icon.slug.charAt(0).toUpperCase() : '?'}
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-center truncate w-full leading-tight">
-                          {icon.slug || '?'}
-                        </span>
-                      </button>
-                    );
-                  })}
-              </div>
-
-              {hasMore && (
-                <div className="mt-4 text-center">
-                  <button
-                    onClick={handleLoadMore}
-                    className="px-4 py-2 text-sm text-primary hover:bg-accent rounded-md transition-colors"
-                  >
-                    Load more icons
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        {iconPickerContent}
       </div>
     </div>
   );

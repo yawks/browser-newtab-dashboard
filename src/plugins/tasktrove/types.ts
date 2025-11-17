@@ -1,4 +1,4 @@
-export type TasktroveStatusFilter = 'today' | 'upcoming' | 'completed' | null;
+export type TasktroveStatusFilter = 'today' | 'upcoming' | 'completed' | 'uncompleted' | null;
 
 export interface TasktroveConfig {
   apiEndpoint: string;

@@ -116,6 +116,8 @@ export function TasktroveConfigModal({
         return 'Upcoming';
       case 'completed':
         return 'Completed';
+      case 'uncompleted':
+        return 'Uncompleted';
       default:
         return 'All';
     }
@@ -128,6 +130,8 @@ export function TasktroveConfigModal({
       case 'upcoming':
         return <TrendingUp className="w-4 h-4" />;
       case 'completed':
+        return <Check className="w-4 h-4" />;
+      case 'uncompleted':
         return <Check className="w-4 h-4" />;
       default:
         return null;
@@ -254,6 +258,17 @@ export function TasktroveConfigModal({
                     >
                       <Check className="w-4 h-4" />
                       <span>Completed</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter('uncompleted');
+                        setShowStatusPopover(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Uncompleted</span>
                     </button>
                   </div>
                 )}

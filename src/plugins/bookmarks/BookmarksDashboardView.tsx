@@ -1,15 +1,9 @@
-import { PluginComponentProps } from '@/types/plugin';
 import { BookmarksConfig } from './types';
+import { PluginComponentProps } from '@/types/plugin';
 
 export function BookmarksDashboardView({ config }: PluginComponentProps) {
   const bookmarksConfig = (config as unknown as BookmarksConfig) || { bookmarks: [] };
   const bookmarks = bookmarksConfig.bookmarks || [];
-
-  // Debug: log bookmarks to console
-  console.log('BookmarksDashboardView - config:', config);
-  console.log('BookmarksDashboardView - bookmarksConfig:', bookmarksConfig);
-  console.log('BookmarksDashboardView - bookmarks:', bookmarks);
-  console.log('BookmarksDashboardView - bookmarks.length:', bookmarks.length);
 
   const handleBookmarkClick = (url: string) => {
     window.location.href = url;
@@ -23,12 +17,9 @@ export function BookmarksDashboardView({ config }: PluginComponentProps) {
     );
   }
 
-  console.log('BookmarksDashboardView - Rendering', bookmarks.length, 'bookmarks');
-
   return (
     <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 w-full">
-      {bookmarks.map((bookmark, index) => {
-        console.log(`BookmarksDashboardView - Rendering bookmark ${index}:`, bookmark);
+      {bookmarks.map((bookmark, _) => {
         return (
         <button
           key={bookmark.id}

@@ -11,6 +11,7 @@ export interface FrameData {
   h: number;
   config: Record<string, unknown>;
   name?: string;
+  isNsfw?: boolean;
 }
 
 const STORAGE_KEY = 'dashboard_data';

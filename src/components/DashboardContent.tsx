@@ -106,6 +106,14 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
     saveDashboardData({ frames: newFrames });
   };
 
+  const handleNsfwToggle = (frameId: string, isNsfw: boolean) => {
+    const newFrames = frames.map((f) =>
+      f.id === frameId ? { ...f, isNsfw } : f
+    );
+    setFrames(newFrames);
+    saveDashboardData({ frames: newFrames });
+  };
+
   const handleExport = () => {
     const exportData = {
       version: '1.0.0',
@@ -196,17 +204,16 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b border-border">
-        <div className="flex items-center justify-end p-4">
-          <SettingsMenu 
-            onAddWidget={() => setShowPluginSelector(true)}
-            onExport={handleExport}
-            onImport={handleImport}
-          />
-        </div>
+      {/* Floating settings button */}
+      <div className="fixed top-4 right-4 z-50">
+        <SettingsMenu 
+          onAddWidget={() => setShowPluginSelector(true)}
+          onExport={handleExport}
+          onImport={handleImport}
+        />
       </div>
 
-      <div className="p-4">
+      <div className="p-2">
         {isEmpty ? (
           <EmptyDashboard onAddWidget={() => setShowPluginSelector(true)} />
         ) : (
@@ -228,6 +235,7 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
                   onDelete={handleDeleteFrame}
                   onConfigChange={handleConfigChange}
                   onNameChange={handleNameChange}
+                  onNsfwToggle={handleNsfwToggle}
                 />
               </div>
             ))}

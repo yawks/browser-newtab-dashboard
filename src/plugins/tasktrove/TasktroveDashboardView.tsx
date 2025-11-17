@@ -140,6 +140,8 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
               }
               case 'completed':
                 return task.completed;
+              case 'uncompleted':
+                return !task.completed;
               default:
                 return true;
             }
@@ -179,7 +181,7 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
     // Refresh every 5 minutes
     const interval = setInterval(loadData, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [tasktroveConfig]);
+  }, [tasktroveConfig.apiEndpoint, tasktroveConfig.apiToken, tasktroveConfig.statusFilter, tasktroveConfig.projectIds, tasktroveConfig.labelIds]);
 
   if (isLoading) {
     return (
@@ -207,8 +209,8 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
   }
 
   return (
-    <div className="p-3 space-y-2 overflow-y-auto">
-      {tasks.map((task) => {
+    <div className="p-2 overflow-y-auto">
+      {tasks.map((task, index) => {
         const dueDate = formatDate(task.dueDate);
         const isOverdue = isDateOverdue(task.dueDate);
         const priorityColor = getPriorityColor(task.priority);
@@ -256,10 +258,9 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
         };
 
         return (
-          <div
-            key={task.id}
-            className="p-3 border border-border rounded-lg"
-          >
+          <div key={task.id}>
+            {index > 0 && <div className="border-t border-border my-1" />}
+            <div className="py-2">
             {/* First line: checkbox + title */}
             <div className="flex items-start gap-2 mb-2">
               <button
@@ -353,6 +354,7 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
                   <span>{project?.name || 'No project'}</span>
                 </div>
               </div>
+            </div>
             </div>
           </div>
         );

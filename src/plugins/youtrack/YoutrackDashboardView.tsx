@@ -133,7 +133,7 @@ export function YoutrackDashboardView({ config }: PluginComponentProps) {
     // Refresh every 5 minutes
     const interval = setInterval(loadIssues, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [youtrackConfig]);
+  }, [youtrackConfig.apiEndpoint, youtrackConfig.authorizationHeader, youtrackConfig.issueFields, youtrackConfig.query, youtrackConfig.baseUrl]);
 
   if (isLoading) {
     return (
@@ -167,8 +167,8 @@ export function YoutrackDashboardView({ config }: PluginComponentProps) {
   };
 
   return (
-    <div className="p-3 space-y-2 overflow-y-auto">
-      {issues.map((issue) => {
+    <div className="p-2 overflow-y-auto">
+      {issues.map((issue, index) => {
         const timestamp = issue.updated || issue.created || Date.now();
         const relativeTime = formatRelativeTime(timestamp);
         const fullTimestamp = formatTimestamp(timestamp);
@@ -176,52 +176,54 @@ export function YoutrackDashboardView({ config }: PluginComponentProps) {
         const issueUrl = getIssueUrl(issue);
 
         return (
-          <a
-            key={issue.id}
-            href={issueUrl}
-            className="block p-3 border border-border rounded-lg hover:bg-accent transition-colors cursor-pointer"
-            onClick={(e) => {
-              // Prevent navigation if baseUrl is not configured
-              if (!youtrackConfig.baseUrl) {
-                e.preventDefault();
-              }
-            }}
-          >
-            <div className="flex items-start gap-2 mb-2">
-              <div className="mt-0.5 text-muted-foreground">
-                {getIssueIcon(issue)}
+          <div key={issue.id}>
+            {index > 0 && <div className="border-t border-border my-1" />}
+            <a
+              href={issueUrl}
+              className="block py-2 hover:bg-accent/50 transition-colors cursor-pointer"
+              onClick={(e) => {
+                // Prevent navigation if baseUrl is not configured
+                if (!youtrackConfig.baseUrl) {
+                  e.preventDefault();
+                }
+              }}
+            >
+              <div className="flex items-start gap-2 mb-1">
+                <div className="mt-0.5 text-muted-foreground">
+                  {getIssueIcon(issue)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-sm truncate">
+                    {issue.idReadable || issue.id}: {issue.summary || 'No title'}
+                  </h4>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="font-medium text-sm truncate">
-                  {issue.idReadable || issue.id}: {issue.summary || 'No title'}
-                </h4>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                  {tags.map((tag, tagIndex) => {
+                    const tagName = tag.name || '';
+                    if (!tagName) return null;
+                    return (
+                      <span
+                        key={tagIndex}
+                        className={`px-2 py-0.5 rounded text-xs border ${getTagColor(tagName)}`}
+                      >
+                        {tagName}
+                      </span>
+                    );
+                  })}
+                </div>
+                {timestamp && (
+                  <span
+                    className="text-xs text-muted-foreground whitespace-nowrap"
+                    title={fullTimestamp}
+                  >
+                    {relativeTime}
+                  </span>
+                )}
               </div>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-1 flex-1 min-w-0">
-                {tags.map((tag, index) => {
-                  const tagName = tag.name || '';
-                  if (!tagName) return null;
-                  return (
-                    <span
-                      key={index}
-                      className={`px-2 py-0.5 rounded text-xs border ${getTagColor(tagName)}`}
-                    >
-                      {tagName}
-                    </span>
-                  );
-                })}
-              </div>
-              {timestamp && (
-                <span
-                  className="text-xs text-muted-foreground whitespace-nowrap"
-                  title={fullTimestamp}
-                >
-                  {relativeTime}
-                </span>
-              )}
-            </div>
-          </a>
+            </a>
+          </div>
         );
       })}
     </div>

@@ -1,4 +1,4 @@
-import { Settings, X } from 'lucide-react';
+import { Eye, EyeOff, Pencil, Settings, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { FrameData } from '@/lib/storage';
@@ -9,9 +9,10 @@ interface FrameProps {
   onDelete: (frameId: string) => void;
   onConfigChange: (frameId: string, config: Record<string, unknown>) => void;
   onNameChange: (frameId: string, name: string) => void;
+  onNsfwToggle: (frameId: string, isNsfw: boolean) => void;
 }
 
-export function Frame({ frame, onDelete, onConfigChange, onNameChange }: FrameProps) {
+export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwToggle }: FrameProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -42,13 +43,21 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange }: FramePr
 
   const handleConfigChange = (config: Record<string, unknown>) => {
     onConfigChange(frame.id, config);
+    // Exit edit mode after saving configuration
+    setIsEditing(false);
   };
 
   const handleEditClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsEditing(!isEditing);
-    // Enable name editing when clicking the gear icon
+    const newEditingState = !isEditing;
+    setIsEditing(newEditingState);
+    console.log('Frame - handleEditClick: isEditing changed to', newEditingState);
+  };
+
+  const handleNameEditClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsEditingName(true);
   };
 
@@ -72,6 +81,12 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange }: FramePr
     onDelete(frame.id);
   };
 
+  const handleNsfwClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onNsfwToggle(frame.id, !frame.isNsfw);
+  };
+
   const ViewComponent = isEditing ? plugin.EditView : plugin.DashboardView;
 
   return (
@@ -80,12 +95,12 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange }: FramePr
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="drag-handle flex items-center justify-between p-2 border-b border-border bg-muted/50">
-        {isEditingName ? (
-          <div className="flex items-center gap-2 flex-1">
-            {plugin.IconComponent && (
-              <plugin.IconComponent className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            )}
+      <div className="drag-handle flex items-center justify-between px-2 py-1 border-b border-border bg-muted/50">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {plugin.IconComponent && (
+            <plugin.IconComponent className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+          )}
+          {isEditingName ? (
             <input
               ref={nameInputRef}
               type="text"
@@ -93,25 +108,42 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange }: FramePr
               onChange={(e) => setFrameName(e.target.value)}
               onBlur={handleNameBlur}
               onKeyDown={handleNameKeyDown}
-              className="text-sm font-semibold flex-1 bg-background border border-input rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary"
+              className="text-xs font-medium flex-1 bg-background border border-input rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-primary min-w-0"
               placeholder={plugin.metadata.name}
               onMouseDown={(e) => e.stopPropagation()}
             />
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            {plugin.IconComponent && (
-              <plugin.IconComponent className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            )}
-            <h3
-              className="text-sm font-semibold truncate flex-1"
-              title={frame.name || plugin.metadata.name}
-            >
-              {frame.name || plugin.metadata.name}
-            </h3>
-          </div>
-        )}
+          ) : (
+            <div className="flex items-center gap-1 min-w-0 group max-w-full">
+              <h3
+                className="text-xs font-medium truncate max-w-full"
+                title={frame.name || plugin.metadata.name}
+              >
+                {frame.name || plugin.metadata.name}
+              </h3>
+              <button
+                onClick={handleNameEditClick}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="p-0.5 rounded hover:bg-accent transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                title="Edit name"
+                type="button"
+              >
+                <Pencil className="w-3 h-3 text-muted-foreground" />
+              </button>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
+          <button
+            onClick={handleNsfwClick}
+            onMouseDown={(e) => e.stopPropagation()}
+            className={`p-1 rounded hover:bg-accent transition-colors ${
+              isHovered || frame.isNsfw ? 'opacity-100' : 'opacity-0'
+            } ${frame.isNsfw ? 'text-amber-500' : ''}`}
+            title={frame.isNsfw ? 'Show content' : 'Hide content (NSFW)'}
+            type="button"
+          >
+            {frame.isNsfw ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+          </button>
           <button
             onClick={handleEditClick}
             onMouseDown={(e) => e.stopPropagation()}
@@ -138,9 +170,9 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange }: FramePr
       </div>
 
       <div 
-        className="flex-1 overflow-hidden min-h-0"
+        className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
         style={{ 
-          height: 'calc(100% - 40px)',
+          height: 'calc(100% - 28px)',
           position: 'relative'
         }}
         onMouseDown={(e) => {
@@ -156,11 +188,19 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange }: FramePr
           }
         }}
       >
-        <ViewComponent
-          config={frame.config}
-          isEditing={isEditing}
-          onConfigChange={handleConfigChange}
-        />
+        {frame.isNsfw ? (
+          <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+            <EyeOff className="w-12 h-12 text-muted-foreground mb-3 opacity-50" />
+            <p className="text-sm text-muted-foreground mb-1">Content hidden</p>
+            <p className="text-xs text-muted-foreground opacity-70">Click the eye icon to reveal</p>
+          </div>
+        ) : (
+          <ViewComponent
+            config={frame.config}
+            isEditing={isEditing}
+            onConfigChange={handleConfigChange}
+          />
+        )}
       </div>
     </div>
   );

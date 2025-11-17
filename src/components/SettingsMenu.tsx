@@ -55,10 +55,10 @@ export function SettingsMenu({ onAddWidget, onExport, onImport }: SettingsMenuPr
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="p-2 rounded-md hover:bg-accent transition-colors"
+        className="p-2 rounded-full bg-background border border-border shadow-lg hover:bg-accent transition-colors"
         aria-label="Settings"
       >
-        <Settings className="w-5 h-5" />
+        <Settings className="w-4 h-4" />
       </button>
 
       {isOpen && (

@@ -54,6 +54,19 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Initial measurement
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        setDimensions({
+          width: containerRef.current.offsetWidth,
+          height: containerRef.current.offsetHeight,
+        });
+      }
+    };
+
+    // Initial measurement after a short delay to ensure DOM is ready
+    const timeoutId = setTimeout(updateDimensions, 0);
+
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       const { width, height } = entry.contentRect;
@@ -61,11 +74,24 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
     });
 
     observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      clearTimeout(timeoutId);
+      observer.disconnect();
+    };
+  }, [weather]);
 
   useEffect(() => {
     if (!currentSectionRef.current) return;
+
+    // Initial measurement
+    const updateHeight = () => {
+      if (currentSectionRef.current) {
+        setCurrentSectionHeight(currentSectionRef.current.offsetHeight);
+      }
+    };
+
+    // Initial measurement after a short delay
+    const timeoutId = setTimeout(updateHeight, 0);
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -74,8 +100,11 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
     });
 
     observer.observe(currentSectionRef.current);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      clearTimeout(timeoutId);
+      observer.disconnect();
+    };
+  }, [weather]);
 
   if (isLoading) {
     return (
@@ -111,7 +140,11 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
       : 5;
   const forecastDays = weather.forecast.slice(0, maxDays);
   const forecastMinHeight = 140;
-  const availableForecastHeight = Math.max(measuredHeight - currentSectionHeight - 24, 0);
+  // Calculate available height for forecast
+  // If dimensions are not yet measured, assume we have space (will be recalculated when measured)
+  const availableForecastHeight = measuredHeight > 0 && currentSectionHeight > 0
+    ? Math.max(measuredHeight - currentSectionHeight - 24, 0)
+    : 999; // Large value to show forecast by default until measured
   const showForecast =
     forecastDays.length > 0 && measuredWidth > 240 && availableForecastHeight >= forecastMinHeight;
 
@@ -121,7 +154,6 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
       <div
         ref={currentSectionRef}
         className="flex flex-wrap md:flex-nowrap items-center gap-4 p-4 bg-gradient-to-r from-sky-500/10 to-sky-200/10 rounded-lg border border-border flex-shrink-0"
-        style={{ flex: showForecast ? '0 0 auto' : '1 1 auto', minHeight: showForecast ? undefined : '100%' }}
       >
         <img src={currentIcon} alt={weather.current.description} className="w-20 h-20" />
         <div>
@@ -147,7 +179,7 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
       {/* Forecast */}
       {showForecast && (
         <div
-          className="grid gap-2 flex-shrink-0 overflow-hidden"
+          className="grid gap-2 overflow-hidden flex-shrink-0 mt-auto"
           style={{ gridTemplateColumns: `repeat(${forecastDays.length}, minmax(0, 1fr))` }}
         >
           {forecastDays.map((day) => (

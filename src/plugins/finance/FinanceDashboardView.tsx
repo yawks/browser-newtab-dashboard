@@ -112,31 +112,27 @@ export function FinanceDashboardView({ config }: PluginComponentProps) {
         </div>
       )}
 
-      {/* Total (Spent + Earned) */}
+      {/* Total with spent & earned on a single line */}
       {(spentValue !== 0 || earnedValue !== 0) && (
         <div className="flex flex-col gap-1">
           <div className="text-xs text-muted-foreground uppercase tracking-wide">Total</div>
-          <div className="text-2xl font-semibold">
-            {formatValue(totalValue, totalSymbol, 2)}
+          <div className="flex items-baseline gap-4 text-sm">
+            <span className="text-2xl font-semibold">
+              {formatValue(totalValue, totalSymbol, 2)}
+            </span>
+            {spentValue !== 0 && (
+              <div className="flex items-baseline gap-1 text-destructive">
+                <span>-</span>
+                <span>{formatValue(spentValue, spentSymbol, spentDecimals)}</span>
+              </div>
+            )}
+            {earnedValue !== 0 && (
+              <div className="flex items-baseline gap-1 text-green-600 dark:text-green-400">
+                <TrendingUp className="w-4 h-4" />
+                <span>{formatValue(earnedValue, earnedSymbol, earnedDecimals)}</span>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Spent and Earned on same line */}
-      {(spentValue !== 0 || earnedValue !== 0) && (
-        <div className="flex items-center gap-4 text-sm">
-          {spentValue !== 0 && (
-            <div className="flex items-center gap-1 text-destructive">
-              <span>-</span>
-              <span>{formatValue(spentValue, spentSymbol, spentDecimals)}</span>
-            </div>
-          )}
-          {earnedValue !== 0 && (
-            <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-              <TrendingUp className="w-4 h-4" />
-              <span>{formatValue(earnedValue, earnedSymbol, earnedDecimals)}</span>
-            </div>
-          )}
         </div>
       )}
 
