@@ -1,0 +1,494 @@
+{
+  "version": "1.0.0",
+  "exportDate": "2025-01-17T12:00:00.000Z",
+  "frames": [
+    {
+      "id": "frame-bookmarks-001",
+      "pluginId": "bookmarks",
+      "name": "Professional Bookmarks",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 5,
+      "config": {
+        "bookmarks": [
+          {
+            "id": "bookmark-001",
+            "title": "GitHub",
+            "url": "https://github.com",
+            "icon": "https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/github.svg"
+          },
+          {
+            "id": "bookmark-002",
+            "title": "Google Drive",
+            "url": "https://drive.google.com",
+            "icon": "https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/googledrive.svg"
+          },
+          {
+            "id": "bookmark-003",
+            "title": "Notion",
+            "url": "https://notion.so",
+            "icon": "https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/notion.svg"
+          },
+          {
+            "id": "bookmark-004",
+            "title": "Slack",
+            "url": "https://slack.com",
+            "icon": "https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/slack.svg"
+          },
+          {
+            "id": "bookmark-005",
+            "title": "Figma",
+            "url": "https://figma.com",
+            "icon": "https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/figma.svg"
+          },
+          {
+            "id": "bookmark-006",
+            "title": "Linear",
+            "url": "https://linear.app",
+            "icon": "https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/linear.svg"
+          }
+        ]
+      }
+    },
+    {
+      "id": "frame-youtrack-001",
+      "pluginId": "youtrack",
+      "name": "YouTrack - My tickets",
+      "x": 4,
+      "y": 0,
+      "w": 5,
+      "h": 6,
+      "config": {
+        "baseUrl": "https://youtrack.example.com/",
+        "apiEndpoint": "https://youtrack.example.com/api",
+        "authorizationHeader": "Bearer mock-token",
+        "issueFields": "id,idReadable,created,updated,resolved,reporter(email),updater(email),commentsCount,tags(name),customFields($type,id,projectCustomField($type,id,field($type,id,name)),value($type,name,minutes,presentation)),summary,description",
+        "query": "Assignee: me #Unresolved",
+        "mockData": [
+          {
+            "id": "issue-001",
+            "idReadable": "PROJ-123",
+            "created": 1705507200000,
+            "updated": 1705593600000,
+            "summary": "Implement notification system",
+            "tags": [
+              { "name": "feature" },
+              { "name": "high-priority" }
+            ],
+            "commentsCount": 5
+          },
+          {
+            "id": "issue-002",
+            "idReadable": "PROJ-124",
+            "created": 1705410800000,
+            "updated": 1705593600000,
+            "summary": "Fix connection bug",
+            "tags": [
+              { "name": "bug" },
+              { "name": "critical" }
+            ],
+            "commentsCount": 12
+          },
+          {
+            "id": "issue-003",
+            "idReadable": "PROJ-125",
+            "created": 1705324400000,
+            "updated": 1705507200000,
+            "summary": "Refactor authentication module",
+            "tags": [
+              { "name": "refactoring" },
+              { "name": "backend" }
+            ],
+            "commentsCount": 3
+          },
+          {
+            "id": "issue-004",
+            "idReadable": "PROJ-126",
+            "created": 1705238000000,
+            "updated": 1705410800000,
+            "summary": "Add unit tests",
+            "tags": [
+              { "name": "testing" },
+              { "name": "quality" }
+            ],
+            "commentsCount": 8
+          },
+          {
+            "id": "issue-005",
+            "idReadable": "PROJ-127",
+            "created": 1705151600000,
+            "updated": 1705324400000,
+            "summary": "Optimize database performance",
+            "tags": [
+              { "name": "performance" },
+              { "name": "database" }
+            ],
+            "commentsCount": 15
+          }
+        ]
+      }
+    },
+    {
+      "id": "frame-tasktrove-001",
+      "pluginId": "tasktrove",
+      "name": "Tasktrove - Today",
+      "x": 0,
+      "y": 5,
+      "w": 4,
+      "h": 5,
+      "config": {
+        "apiEndpoint": "https://tasktrove.example.com/api/v1",
+        "apiToken": "mock-token",
+        "statusFilter": "today",
+        "projectIds": ["project-001", "project-002"],
+        "mockData": {
+          "tasks": [
+            {
+              "id": "task-001",
+              "title": "Review code for feature X",
+              "completed": false,
+              "dueDate": "2025-11-17",
+              "priority": 1,
+              "subtasks": {
+                "completed": 2,
+                "total": 5
+              },
+              "commentsCount": 3,
+              "labelIds": ["label-001", "label-002"],
+              "projectId": "project-001"
+            },
+            {
+              "id": "task-002",
+              "title": "Prepare client presentation",
+              "completed": false,
+              "dueDate": "2025-11-17",
+              "priority": 2,
+              "subtasks": {
+                "completed": 0,
+                "total": 0
+              },
+              "commentsCount": 1,
+              "labelIds": ["label-003"],
+              "projectId": "project-002"
+            },
+            {
+              "id": "task-003",
+              "title": "Update documentation",
+              "completed": false,
+              "dueDate": "2025-11-17",
+              "priority": 3,
+              "subtasks": {
+                "completed": 1,
+                "total": 3
+              },
+              "commentsCount": 0,
+              "labelIds": [],
+              "projectId": "project-001"
+            }
+          ],
+          "labels": [
+            {
+              "id": "label-001",
+              "name": "Urgent",
+              "slug": "urgent",
+              "color": "#ef4444"
+            },
+            {
+              "id": "label-002",
+              "name": "Code Review",
+              "slug": "code-review",
+              "color": "#3b82f6"
+            },
+            {
+              "id": "label-003",
+              "name": "Client",
+              "slug": "client",
+              "color": "#10b981"
+            }
+          ],
+          "projects": [
+            {
+              "id": "project-001",
+              "name": "Project Alpha",
+              "slug": "projet-alpha",
+              "color": "#8b5cf6"
+            },
+            {
+              "id": "project-002",
+              "name": "Project Beta",
+              "slug": "projet-beta",
+              "color": "#f59e0b"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "frame-tasktrove-002",
+      "pluginId": "tasktrove",
+      "name": "Tasktrove - In Progress",
+      "x": 0,
+      "y": 10,
+      "w": 4,
+      "h": 5,
+      "config": {
+        "apiEndpoint": "https://tasktrove.example.com/api/v1",
+        "apiToken": "mock-token",
+        "statusFilter": "uncompleted",
+        "projectIds": ["project-003"],
+        "mockData": {
+          "tasks": [
+            {
+              "id": "task-004",
+              "title": "Create design for new dashboard",
+              "completed": false,
+              "dueDate": "2025-01-20",
+              "priority": 1,
+              "subtasks": {
+                "completed": 0,
+                "total": 4
+              },
+              "commentsCount": 5,
+              "labelIds": ["label-004"],
+              "projectId": "project-003"
+            },
+            {
+              "id": "task-005",
+              "title": "Implement REST API",
+              "completed": false,
+              "dueDate": "2025-01-25",
+              "priority": 2,
+              "subtasks": {
+                "completed": 3,
+                "total": 6
+              },
+              "commentsCount": 8,
+              "labelIds": ["label-005", "label-006"],
+              "projectId": "project-003"
+            },
+            {
+              "id": "task-006",
+              "title": "Write integration tests",
+              "completed": false,
+              "dueDate": null,
+              "priority": null,
+              "subtasks": {
+                "completed": 0,
+                "total": 0
+              },
+              "commentsCount": 2,
+              "labelIds": ["label-007"],
+              "projectId": "project-003"
+            }
+          ],
+          "labels": [
+            {
+              "id": "label-004",
+              "name": "Design",
+              "slug": "design",
+              "color": "#ec4899"
+            },
+            {
+              "id": "label-005",
+              "name": "Backend",
+              "slug": "backend",
+              "color": "#6366f1"
+            },
+            {
+              "id": "label-006",
+              "name": "API",
+              "slug": "api",
+              "color": "#14b8a6"
+            },
+            {
+              "id": "label-007",
+              "name": "Testing",
+              "slug": "testing",
+              "color": "#f97316"
+            }
+          ],
+          "projects": [
+            {
+              "id": "project-003",
+              "name": "Project Gamma",
+              "slug": "projet-gamma",
+              "color": "#06b6d4"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "frame-meteo-001",
+      "pluginId": "meteo",
+      "name": "Paris Weather",
+      "x": 9,
+      "y": 0,
+      "w": 3,
+      "h": 3,
+      "config": {
+        "provider": "openweather",
+        "apiKey": "mock-api-key",
+        "cityName": "Paris",
+        "country": "FR",
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "mockData": {
+          "current": {
+            "temperature": 12,
+            "minTemperature": 8,
+            "maxTemperature": 15,
+            "description": "partly cloudy",
+            "icon": "02d",
+            "feelsLike": 11,
+            "humidity": 65,
+            "windSpeed": 3.5
+          },
+          "forecast": [
+            {
+              "date": "2025-01-18T00:00:00.000Z",
+              "minTemperature": 9,
+              "maxTemperature": 14,
+              "icon": "03d",
+              "description": "cloudy"
+            },
+            {
+              "date": "2025-01-19T00:00:00.000Z",
+              "minTemperature": 7,
+              "maxTemperature": 13,
+              "icon": "04d",
+              "description": "overcast"
+            },
+            {
+              "date": "2025-01-20T00:00:00.000Z",
+              "minTemperature": 6,
+              "maxTemperature": 12,
+              "icon": "09d",
+              "description": "moderate rain"
+            },
+            {
+              "date": "2025-01-21T00:00:00.000Z",
+              "minTemperature": 5,
+              "maxTemperature": 11,
+              "icon": "10d",
+              "description": "rain"
+            },
+            {
+              "date": "2025-01-22T00:00:00.000Z",
+              "minTemperature": 4,
+              "maxTemperature": 10,
+              "icon": "13d",
+              "description": "light snow"
+            }
+          ],
+          "provider": "openweather",
+          "cityName": "Paris",
+          "country": "FR"
+        }
+      }
+    },
+    {
+      "id": "frame-finance-001",
+      "pluginId": "finance",
+      "name": "Finance - This month",
+      "x": 9,
+      "y": 3,
+      "w": 3,
+      "h": 3,
+      "config": {
+        "apiEndpoint": "https://firefly.example.com/api",
+        "apiToken": "mock-token",
+        "currency": "EUR",
+        "period": "this-month",
+        "mockData": {
+          "netWorth": {
+            "key": "net-worth-in-EUR",
+            "title": "Net Worth",
+            "monetary_value": 45230.50,
+            "currency_id": "1",
+            "currency_code": "EUR",
+            "currency_symbol": "€",
+            "currency_decimal_places": 2,
+            "no_available_budgets": false,
+            "value_parsed": "€45,230.50"
+          },
+          "spent": {
+            "key": "spent-in-EUR",
+            "title": "Spent",
+            "monetary_value": -3245.75,
+            "currency_id": "1",
+            "currency_code": "EUR",
+            "currency_symbol": "€",
+            "currency_decimal_places": 2,
+            "no_available_budgets": false,
+            "value_parsed": "€3,245.75"
+          },
+          "earned": {
+            "key": "earned-in-EUR",
+            "title": "Earned",
+            "monetary_value": 5200.00,
+            "currency_id": "1",
+            "currency_code": "EUR",
+            "currency_symbol": "€",
+            "currency_decimal_places": 2,
+            "no_available_budgets": false,
+            "value_parsed": "€5,200.00"
+          },
+          "total": 1954.25
+        }
+      }
+    },
+    {
+      "id": "frame-finance-002",
+      "pluginId": "finance",
+      "name": "Finance - This year",
+      "x": 9,
+      "y": 6,
+      "w": 3,
+      "h": 3,
+      "config": {
+        "apiEndpoint": "https://firefly.example.com/api",
+        "apiToken": "mock-token",
+        "currency": "EUR",
+        "period": "this-year",
+        "mockData": {
+          "netWorth": {
+            "key": "net-worth-in-EUR",
+            "title": "Net Worth",
+            "monetary_value": 45230.50,
+            "currency_id": "1",
+            "currency_code": "EUR",
+            "currency_symbol": "€",
+            "currency_decimal_places": 2,
+            "no_available_budgets": false,
+            "value_parsed": "€45,230.50"
+          },
+          "spent": {
+            "key": "spent-in-EUR",
+            "title": "Spent",
+            "monetary_value": -28450.25,
+            "currency_id": "1",
+            "currency_code": "EUR",
+            "currency_symbol": "€",
+            "currency_decimal_places": 2,
+            "no_available_budgets": false,
+            "value_parsed": "€28,450.25"
+          },
+          "earned": {
+            "key": "earned-in-EUR",
+            "title": "Earned",
+            "monetary_value": 45600.00,
+            "currency_id": "1",
+            "currency_code": "EUR",
+            "currency_symbol": "€",
+            "currency_decimal_places": 2,
+            "no_available_budgets": false,
+            "value_parsed": "€45,600.00"
+          },
+          "total": 17149.75
+        }
+      }
+    }
+  ]
+}

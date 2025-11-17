@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { PluginComponentProps } from '@/types/plugin';
-import { MeteoConfig, MeteoWeatherData } from './types';
-import { fetchMeteoData } from './api';
 import { AlertCircle, Loader2 } from 'lucide-react';
+import { MeteoConfig, MeteoWeatherData } from './types';
+import { useEffect, useRef, useState } from 'react';
+
+import { PluginComponentProps } from '@/types/plugin';
+import { fetchMeteoData } from './api';
 
 function formatDate(dateString: string) {
   const date = new Date(dateString);
@@ -10,7 +11,7 @@ function formatDate(dateString: string) {
 }
 
 export function MeteoDashboardView({ config }: PluginComponentProps) {
-  const meteoConfig = (config as unknown as MeteoConfig) || {
+  const meteoConfig = (config as unknown as MeteoConfig & { mockData?: MeteoWeatherData }) || {
     provider: 'openweather',
     apiKey: '',
   };
@@ -25,6 +26,14 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
 
   useEffect(() => {
     const loadWeather = async () => {
+      // Check if mock data is provided
+      if (meteoConfig.mockData) {
+        setWeather(meteoConfig.mockData);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
       if (!meteoConfig.apiKey || !meteoConfig.latitude || !meteoConfig.longitude) {
         setError('Please configure the weather widget (API key and city).');
         setIsLoading(false);
@@ -47,9 +56,12 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
 
     loadWeather();
 
-    const interval = setInterval(loadWeather, 10 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [meteoConfig.apiKey, meteoConfig.latitude, meteoConfig.longitude, meteoConfig.provider, meteoConfig.cityName]);
+    // Only set up refresh interval if not using mock data
+    if (!meteoConfig.mockData) {
+      const interval = setInterval(loadWeather, 10 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [meteoConfig.apiKey, meteoConfig.latitude, meteoConfig.longitude, meteoConfig.provider, meteoConfig.cityName, meteoConfig.mockData]);
 
   useEffect(() => {
     if (!containerRef.current) return;

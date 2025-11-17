@@ -2,6 +2,10 @@
 
 A customizable, widget-based dashboard extension for Chrome and Firefox that replaces your browser's default new tab page with a powerful, flexible dashboard system.
 
+![Dashboard Light Mode](resources/dashboard_light.png)
+
+![Dashboard Dark Mode](resources/dashboard_dark.png)
+
 ## Overview
 
 Dashboard New Tab is a browser extension that transforms your new tab page into a fully customizable dashboard. It features a drag-and-drop grid layout system where you can add, arrange, resize, and configure various widgets to create your perfect workspace.
@@ -43,7 +47,7 @@ A powerful bookmark manager with icon support.
 
 ### 2. Youtrack
 
-Display and manage issues from your Youtrack instance.
+Display and manage issues from your [Youtrack](https://www.jetbrains.com/youtrack/) instance.
 
 **Features:**
 - View unresolved issues
@@ -62,7 +66,7 @@ Display and manage issues from your Youtrack instance.
 
 ### 3. Tasktrove
 
-Manage tasks from your Tasktrove instance.
+Manage tasks from your [Tasktrove](https://github.com/dohsimpson/TaskTrove) instance.
 
 **Features:**
 - Task list with completion status
@@ -97,7 +101,7 @@ Display current weather and forecast information.
 - Auto-refresh every 10 minutes
 
 **Configuration:**
-- Provider: Currently supports OpenWeatherMap
+- Provider: Currently supports [OpenWeatherMap](https://openweathermap.org/)
 - API Key: Your OpenWeatherMap API key
 - City: Search and select your city with autocomplete
 
@@ -105,7 +109,7 @@ Display current weather and forecast information.
 
 ### 5. Firefly
 
-Display financial summary and net worth from Firefly III API.
+Display financial summary and net worth from [Firefly](https://github.com/firefly-iii/firefly-iii) III API.
 
 **Features:**
 - Net worth display
@@ -169,6 +173,8 @@ npm run build
 1. Click the gear icon on any widget frame
 2. Enter edit mode and configure the widget settings
 3. Click "Save" to apply changes
+
+![Configure Widget](resources/configure_widget.png)
 
 ### Managing Widgets
 
@@ -330,7 +336,7 @@ Contributions are welcome! Please:
 
 ## License
 
-[Add your license here]
+This project is licensed under the MIT License.
 
 ## Version History
 

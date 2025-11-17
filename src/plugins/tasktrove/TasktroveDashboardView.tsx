@@ -66,7 +66,13 @@ function getPriorityLabel(priority: number | null | undefined): string {
 }
 
 export function TasktroveDashboardView({ config }: PluginComponentProps) {
-  const tasktroveConfig = (config as unknown as TasktroveConfig) || {
+  const tasktroveConfig = (config as unknown as TasktroveConfig & { 
+    mockData?: {
+      tasks?: TasktroveTask[];
+      labels?: TasktroveLabel[];
+      projects?: TasktroveProject[];
+    }
+  }) || {
     apiEndpoint: '',
     apiToken: '',
   };
@@ -79,6 +85,81 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
 
   useEffect(() => {
     const loadData = async () => {
+      // Check if mock data is provided
+      if (tasktroveConfig.mockData) {
+        const mockTasks = tasktroveConfig.mockData.tasks || [];
+        const mockLabels = tasktroveConfig.mockData.labels || [];
+        const mockProjects = tasktroveConfig.mockData.projects || [];
+
+        // Create maps for quick lookup
+        const labelsMap = new Map<string, TasktroveLabel>();
+        mockLabels.forEach(label => {
+          labelsMap.set(label.id, label);
+        });
+
+        const projectsMap = new Map<string, TasktroveProject>();
+        mockProjects.forEach(project => {
+          projectsMap.set(project.id, project);
+        });
+
+        // Apply filters
+        let filteredTasks = mockTasks;
+
+        // Status filter
+        if (tasktroveConfig.statusFilter) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          filteredTasks = filteredTasks.filter(task => {
+            switch (tasktroveConfig.statusFilter) {
+              case 'today': {
+                if (task.completed) return false;
+                if (!task.dueDate) return false;
+                const taskDate = new Date(task.dueDate);
+                taskDate.setHours(0, 0, 0, 0);
+                return taskDate <= today;
+              }
+              case 'upcoming': {
+                if (task.completed) return false;
+                if (!task.dueDate) return false;
+                const upcomingDate = new Date(task.dueDate);
+                upcomingDate.setHours(0, 0, 0, 0);
+                return upcomingDate >= tomorrow;
+              }
+              case 'completed':
+                return task.completed;
+              case 'uncompleted':
+                return !task.completed;
+              default:
+                return true;
+            }
+          });
+        }
+
+        // Project filter
+        if (tasktroveConfig.projectIds && tasktroveConfig.projectIds.length > 0) {
+          filteredTasks = filteredTasks.filter(task =>
+            task.projectId && tasktroveConfig.projectIds!.includes(task.projectId)
+          );
+        }
+
+        // Label filter
+        if (tasktroveConfig.labelIds && tasktroveConfig.labelIds.length > 0) {
+          filteredTasks = filteredTasks.filter(task =>
+            task.labelIds.some(labelId => tasktroveConfig.labelIds!.includes(labelId))
+          );
+        }
+
+        setTasks(filteredTasks);
+        setLabels(labelsMap);
+        setProjects(projectsMap);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
       // Check if configuration is complete
       if (!tasktroveConfig.apiEndpoint || !tasktroveConfig.apiToken) {
         setError('Configuration incomplete. Please configure the widget in edit mode.');
@@ -178,10 +259,12 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
 
     loadData();
 
-    // Refresh every 5 minutes
-    const interval = setInterval(loadData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [tasktroveConfig.apiEndpoint, tasktroveConfig.apiToken, tasktroveConfig.statusFilter, tasktroveConfig.projectIds, tasktroveConfig.labelIds]);
+    // Only set up refresh interval if not using mock data
+    if (!tasktroveConfig.mockData) {
+      const interval = setInterval(loadData, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [tasktroveConfig.apiEndpoint, tasktroveConfig.apiToken, tasktroveConfig.statusFilter, tasktroveConfig.projectIds, tasktroveConfig.labelIds, tasktroveConfig.mockData]);
 
   if (isLoading) {
     return (

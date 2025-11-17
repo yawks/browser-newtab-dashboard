@@ -48,7 +48,7 @@ export function BookmarksDashboardView({ config }: PluginComponentProps) {
               {bookmark.title && bookmark.title.length > 0 ? bookmark.title.charAt(0).toUpperCase() : '?'}
             </div>
           </div>
-          <span className="text-xs font-medium text-center w-full leading-tight px-1 line-clamp-2 break-words">
+          <span className="text-xs text-center w-full leading-tight line-clamp-2 break-words">
             {bookmark.title}
           </span>
         </button>

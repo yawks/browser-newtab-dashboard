@@ -6,7 +6,7 @@ import { PluginComponentProps } from '@/types/plugin';
 import { fetchFinanceSummary } from './api';
 
 export function FinanceDashboardView({ config }: PluginComponentProps) {
-  const financeConfig = (config as unknown as FinanceConfig) || {
+  const financeConfig = (config as unknown as FinanceConfig & { mockData?: FinanceData }) || {
     apiEndpoint: '',
     apiToken: '',
     currency: 'EUR',
@@ -19,6 +19,14 @@ export function FinanceDashboardView({ config }: PluginComponentProps) {
 
   useEffect(() => {
     const loadData = async () => {
+      // Check if mock data is provided
+      if (financeConfig.mockData) {
+        setData(financeConfig.mockData);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
       if (!financeConfig.apiEndpoint || !financeConfig.apiToken) {
         setError('Please configure the finance widget (API endpoint and token).');
         setIsLoading(false);
@@ -41,9 +49,12 @@ export function FinanceDashboardView({ config }: PluginComponentProps) {
 
     loadData();
 
-    const interval = setInterval(loadData, 5 * 60 * 1000); // Refresh every 5 minutes
-    return () => clearInterval(interval);
-  }, [financeConfig.apiEndpoint, financeConfig.apiToken, financeConfig.currency, financeConfig.period]);
+    // Only set up refresh interval if not using mock data
+    if (!financeConfig.mockData) {
+      const interval = setInterval(loadData, 5 * 60 * 1000); // Refresh every 5 minutes
+      return () => clearInterval(interval);
+    }
+  }, [financeConfig.apiEndpoint, financeConfig.apiToken, financeConfig.currency, financeConfig.period, financeConfig.mockData]);
 
   if (isLoading) {
     return (

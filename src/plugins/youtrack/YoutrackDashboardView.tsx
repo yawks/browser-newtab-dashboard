@@ -85,7 +85,7 @@ function getTagColor(tagName: string): string {
 }
 
 export function YoutrackDashboardView({ config }: PluginComponentProps) {
-  const youtrackConfig = (config as unknown as YoutrackConfig) || {
+  const youtrackConfig = (config as unknown as YoutrackConfig & { mockData?: YoutrackIssue[] }) || {
     baseUrl: '',
     apiEndpoint: '',
     authorizationHeader: '',
@@ -99,6 +99,14 @@ export function YoutrackDashboardView({ config }: PluginComponentProps) {
 
   useEffect(() => {
     const loadIssues = async () => {
+      // Check if mock data is provided
+      if (youtrackConfig.mockData && Array.isArray(youtrackConfig.mockData)) {
+        setIssues(youtrackConfig.mockData);
+        setIsLoading(false);
+        setError(null);
+        return;
+      }
+
       // Check if configuration is complete
       if (
         !youtrackConfig.apiEndpoint ||
@@ -130,10 +138,12 @@ export function YoutrackDashboardView({ config }: PluginComponentProps) {
 
     loadIssues();
 
-    // Refresh every 5 minutes
-    const interval = setInterval(loadIssues, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [youtrackConfig.apiEndpoint, youtrackConfig.authorizationHeader, youtrackConfig.issueFields, youtrackConfig.query, youtrackConfig.baseUrl]);
+    // Only set up refresh interval if not using mock data
+    if (!youtrackConfig.mockData) {
+      const interval = setInterval(loadIssues, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [youtrackConfig.apiEndpoint, youtrackConfig.authorizationHeader, youtrackConfig.issueFields, youtrackConfig.query, youtrackConfig.baseUrl, youtrackConfig.mockData]);
 
   if (isLoading) {
     return (
