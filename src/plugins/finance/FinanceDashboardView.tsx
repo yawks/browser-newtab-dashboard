@@ -174,7 +174,7 @@ export function FinanceDashboardView({ config }: PluginComponentProps) {
   return (
     <div className="h-full p-4">
       <div
-        className="h-full w-full rounded-2xl border border-border shadow-inner flex flex-col items-center justify-center text-center gap-5 px-2 py-6 transition-colors"
+        className="h-full w-full shadow-inner flex flex-col items-center justify-center text-center gap-5 px-2 py-6 transition-colors"
         style={backgroundSurfaceStyles}
       >
         <div className="flex flex-col items-center gap-3">

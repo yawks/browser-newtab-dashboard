@@ -206,7 +206,7 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
   return (
     <div className="min-h-screen bg-background">
       {/* Floating settings button */}
-      <div className="fixed top-4 right-4 z-50">
+      <div className="fixed top-2 right-2 z-50">
         <SettingsMenu 
           onAddWidget={() => setShowPluginSelector(true)}
           onExport={handleExport}
