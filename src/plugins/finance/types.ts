@@ -7,6 +7,7 @@ export interface FinanceConfig {
   apiToken: string;
   currency: FinanceCurrency;
   period: FinancePeriod;
+  targetAmount7DaysBeforeEndOfMonth?: number;
 }
 
 export interface FinanceSummaryItem {

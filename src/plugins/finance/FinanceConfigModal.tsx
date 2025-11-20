@@ -26,6 +26,11 @@ export function FinanceConfigModal({ config, onSave, onClose }: FinanceConfigMod
   const [apiToken, setApiToken] = useState(config?.apiToken || '');
   const [currency, setCurrency] = useState<FinanceCurrency>(config?.currency || 'EUR');
   const [period, setPeriod] = useState<FinancePeriod>(config?.period || 'this-month');
+  const [targetAmountSevenDays, setTargetAmountSevenDays] = useState<number | ''>(
+    typeof config?.targetAmount7DaysBeforeEndOfMonth === 'number'
+      ? config.targetAmount7DaysBeforeEndOfMonth
+      : ''
+  );
   const [showCurrencyPopover, setShowCurrencyPopover] = useState(false);
   const [showPeriodPopover, setShowPeriodPopover] = useState(false);
 
@@ -53,6 +58,8 @@ export function FinanceConfigModal({ config, onSave, onClose }: FinanceConfigMod
       apiToken: apiToken.trim(),
       currency,
       period,
+      targetAmount7DaysBeforeEndOfMonth:
+        targetAmountSevenDays === '' ? undefined : Number(targetAmountSevenDays),
     };
 
     onSave(newConfig);
@@ -177,6 +184,32 @@ export function FinanceConfigModal({ config, onSave, onClose }: FinanceConfigMod
                 </div>
               )}
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="targetAmountSevenDays" className="text-sm font-medium mb-2 block">
+              Target balance 7 days before month end
+            </label>
+            <input
+              id="targetAmountSevenDays"
+              type="number"
+              min="0"
+              step="0.01"
+              value={targetAmountSevenDays}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '') {
+                  setTargetAmountSevenDays('');
+                } else {
+                  setTargetAmountSevenDays(Number(value));
+                }
+              }}
+              placeholder="e.g. 1000"
+              className="w-full px-3 py-2 border border-input rounded-md bg-background"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Used to compute the goal ratio: amount / (days remaining once only 7 days are left).
+            </p>
           </div>
 
           <div className="flex gap-2 justify-end pt-2">

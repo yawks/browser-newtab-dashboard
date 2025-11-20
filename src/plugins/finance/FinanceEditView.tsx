@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { PluginComponentProps } from '@/types/plugin';
+import { useEffect, useState } from 'react';
+
 import { FinanceConfig } from './types';
 import { FinanceConfigModal } from './FinanceConfigModal';
+import { PluginComponentProps } from '@/types/plugin';
 
 export function FinanceEditView({ config, onConfigChange, isEditing }: PluginComponentProps) {
   const financeConfig = (config as unknown as FinanceConfig) || {
@@ -9,9 +10,10 @@ export function FinanceEditView({ config, onConfigChange, isEditing }: PluginCom
     apiToken: '',
     currency: 'EUR',
     period: 'this-month',
+    targetAmount7DaysBeforeEndOfMonth: 0,
   };
 
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(isEditing);
 
   // Open modal when entering edit mode
   useEffect(() => {
