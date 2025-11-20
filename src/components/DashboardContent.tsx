@@ -1,5 +1,6 @@
 import { FrameData, saveDashboardData } from '@/lib/storage';
-import { Layout, Responsive, WidthProvider } from 'react-grid-layout';
+import { Layout, WidthProvider } from 'react-grid-layout';
+import GridLayout from 'react-grid-layout';
 import { useEffect, useState } from 'react';
 
 import { EmptyDashboard } from './EmptyDashboard';
@@ -8,7 +9,7 @@ import { PluginSelector } from './PluginSelector';
 import { SettingsMenu } from './SettingsMenu';
 import { WelcomeModal } from './WelcomeModal';
 
-const ResponsiveGridLayout = WidthProvider(Responsive);
+const FixedGridLayout = WidthProvider(GridLayout);
 
 interface DashboardContentProps {
   initialFrames: FrameData[];
@@ -217,16 +218,16 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
         {isEmpty ? (
           <EmptyDashboard onAddWidget={() => setShowPluginSelector(true)} />
         ) : (
-          <ResponsiveGridLayout
+          <FixedGridLayout
             className="layout"
-            layouts={{ lg: layout }}
-            breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-            cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
+            layout={layout}
+            cols={12}
             rowHeight={60}
             onLayoutChange={(layout) => handleLayoutChange(layout as Layout[])}
             isDraggable={true}
             isResizable={true}
             draggableHandle=".drag-handle"
+            compactType={null}
           >
             {frames.map((frame) => (
               <div key={frame.id}>
@@ -239,7 +240,7 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
                 />
               </div>
             ))}
-          </ResponsiveGridLayout>
+          </FixedGridLayout>
         )}
       </div>
 
