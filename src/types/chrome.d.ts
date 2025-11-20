@@ -6,5 +6,35 @@ declare namespace chrome {
     }
     const local: StorageArea;
   }
+  namespace identity {
+    interface TokenDetails {
+      interactive?: boolean;
+      account?: { id: string };
+      scopes?: string[];
+    }
+    interface RemoveCachedAuthTokenDetails {
+      token: string;
+    }
+    interface WebAuthFlowOptions {
+      url: string;
+      interactive?: boolean;
+    }
+    function getAuthToken(
+      details: TokenDetails,
+      callback: (token?: string) => void
+    ): void;
+    function getRedirectURL(path?: string): string;
+    function launchWebAuthFlow(
+      details: WebAuthFlowOptions,
+      callback: (responseUrl?: string) => void
+    ): void;
+    function removeCachedAuthToken(
+      details: RemoveCachedAuthTokenDetails,
+      callback: () => void
+    ): void;
+  }
+  namespace runtime {
+    const lastError: { message?: string } | undefined;
+  }
 }
 

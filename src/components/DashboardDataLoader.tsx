@@ -25,7 +25,7 @@ function getDashboardData(): DashboardData {
 
 function DashboardDataWrapper() {
   const data = getDashboardData();
-  return <DashboardContent initialFrames={data.frames} />;
+  return <DashboardContent initialData={data} />;
 }
 
 export function DashboardDataLoader() {

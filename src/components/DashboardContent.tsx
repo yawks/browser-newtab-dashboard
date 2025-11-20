@@ -1,30 +1,52 @@
-import { FrameData, saveDashboardData } from '@/lib/storage';
+import { DashboardData, FrameData, SpaceData, deleteSpace, saveSpaceFrames, setActiveSpace } from '@/lib/storage';
 import { Layout, WidthProvider } from 'react-grid-layout';
 import { useEffect, useState } from 'react';
 
+import { DeleteSpaceModal } from './DeleteSpaceModal';
 import { EmptyDashboard } from './EmptyDashboard';
 import { Frame } from './Frame';
 import GridLayout from 'react-grid-layout';
 import { PluginSelector } from './PluginSelector';
 import { SettingsMenu } from './SettingsMenu';
+import { SpaceTabs } from './SpaceTabs';
 import { WelcomeModal } from './WelcomeModal';
 
 const FixedGridLayout = WidthProvider(GridLayout);
 
 interface DashboardContentProps {
-  initialFrames: FrameData[];
+  initialData: DashboardData;
 }
 
 const WELCOME_MODAL_DISMISSED_KEY = 'dashboard_welcome_dismissed';
 
-export function DashboardContent({ initialFrames }: DashboardContentProps) {
-  const [frames, setFrames] = useState<FrameData[]>(initialFrames);
+export function DashboardContent({ initialData }: DashboardContentProps) {
+  const [spaces, setSpaces] = useState<SpaceData[]>(initialData.spaces);
+  const [activeSpaceId, setActiveSpaceId] = useState<string>(initialData.activeSpaceId);
   const [showPluginSelector, setShowPluginSelector] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [spaceToDelete, setSpaceToDelete] = useState<SpaceData | null>(null);
+  
+  const activeSpace = spaces.find((s) => s.id === activeSpaceId) || spaces[0];
+  const frames = activeSpace?.frames || [];
 
-  // Debug: log initial frames
-  console.log('DashboardContent - initialFrames:', initialFrames);
-  console.log('DashboardContent - frames state:', frames);
+  // Helper function to update frames of the active space
+  const updateActiveSpaceFrames = (newFrames: FrameData[]) => {
+    setSpaces((prevSpaces) => {
+      return prevSpaces.map((space) => {
+        if (space.id === activeSpaceId) {
+          return { ...space, frames: newFrames };
+        }
+        return space;
+      });
+    });
+    saveSpaceFrames(activeSpaceId, newFrames);
+  };
+
+  // Debug: log initial data
+  console.log('DashboardContent - initialData:', initialData);
+  console.log('DashboardContent - activeSpaceId:', activeSpaceId);
+  console.log('DashboardContent - frames:', frames);
 
   useEffect(() => {
     if (frames.length === 0) {
@@ -34,6 +56,43 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
       }
     }
   }, [frames.length]);
+
+  const handleSpaceSelect = async (spaceId: string) => {
+    if (spaceId === activeSpaceId) return;
+    
+    setIsTransitioning(true);
+    await setActiveSpace(spaceId);
+    // Small delay for animation
+    setTimeout(() => {
+      setActiveSpaceId(spaceId);
+      setIsTransitioning(false);
+    }, 150);
+  };
+
+  const handleSpaceDeleteRequest = (spaceId: string) => {
+    const space = spaces.find((s) => s.id === spaceId);
+    if (space) {
+      setSpaceToDelete(space);
+    }
+  };
+
+  const handleSpaceDeleteConfirm = async () => {
+    if (!spaceToDelete) return;
+    
+    try {
+      await deleteSpace(spaceToDelete.id);
+      const newData = await import('@/lib/storage').then((m) => m.loadDashboardData());
+      setSpaces(newData.spaces);
+      setActiveSpaceId(newData.activeSpaceId);
+      setSpaceToDelete(null);
+    } catch (error) {
+      console.error('Failed to delete space:', error);
+      if (error instanceof Error) {
+        alert(error.message);
+      }
+      setSpaceToDelete(null);
+    }
+  };
 
   const handleLayoutChange = (layout: Layout[]) => {
     const updatedFrames = frames.map((frame) => {
@@ -50,8 +109,7 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
       return frame;
     });
 
-    setFrames(updatedFrames);
-    saveDashboardData({ frames: updatedFrames });
+    updateActiveSpaceFrames(updatedFrames);
   };
 
   const handleAddFrame = (pluginId: string) => {
@@ -66,8 +124,7 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
     };
 
     const newFrames = [...frames, newFrame];
-    setFrames(newFrames);
-    saveDashboardData({ frames: newFrames });
+    updateActiveSpaceFrames(newFrames);
     setShowPluginSelector(false);
     setShowWelcomeModal(false);
   };
@@ -85,8 +142,7 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
 
   const handleDeleteFrame = (frameId: string) => {
     const newFrames = frames.filter((f) => f.id !== frameId);
-    setFrames(newFrames);
-    saveDashboardData({ frames: newFrames });
+    updateActiveSpaceFrames(newFrames);
   };
 
   const handleConfigChange = (frameId: string, config: Record<string, unknown>) => {
@@ -95,24 +151,21 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
       f.id === frameId ? { ...f, config } : f
     );
     console.log('handleConfigChange - newFrames:', newFrames);
-    setFrames(newFrames);
-    saveDashboardData({ frames: newFrames });
+    updateActiveSpaceFrames(newFrames);
   };
 
   const handleNameChange = (frameId: string, name: string) => {
     const newFrames = frames.map((f) =>
       f.id === frameId ? { ...f, name: name.trim() || undefined } : f
     );
-    setFrames(newFrames);
-    saveDashboardData({ frames: newFrames });
+    updateActiveSpaceFrames(newFrames);
   };
 
   const handleNsfwToggle = (frameId: string, isNsfw: boolean) => {
     const newFrames = frames.map((f) =>
       f.id === frameId ? { ...f, isNsfw } : f
     );
-    setFrames(newFrames);
-    saveDashboardData({ frames: newFrames });
+    updateActiveSpaceFrames(newFrames);
   };
 
   const handleExport = () => {
@@ -176,9 +229,8 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
           }
 
           // Confirm import
-          if (confirm(`This will replace your current dashboard with ${validFrames.length} frame(s). Continue?`)) {
-            setFrames(validFrames);
-            saveDashboardData({ frames: validFrames });
+          if (confirm(`This will replace your current space with ${validFrames.length} frame(s). Continue?`)) {
+            updateActiveSpaceFrames(validFrames);
             alert('Dashboard imported successfully!');
           }
         } catch (error) {
@@ -189,6 +241,10 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
       reader.readAsText(file);
     };
     input.click();
+  };
+
+  const handleSpacesUpdate = (updatedSpaces: SpaceData[]) => {
+    setSpaces(updatedSpaces);
   };
 
   const layout: Layout[] = frames.map((frame) => ({
@@ -205,16 +261,26 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Space Tabs */}
+      <SpaceTabs
+        spaces={spaces}
+        activeSpaceId={activeSpaceId}
+        onSpaceSelect={handleSpaceSelect}
+      />
+
       {/* Floating settings button */}
       <div className="fixed top-2 right-2 z-50">
         <SettingsMenu 
           onAddWidget={() => setShowPluginSelector(true)}
           onExport={handleExport}
           onImport={handleImport}
+          spaces={spaces}
+          onSpacesUpdate={handleSpacesUpdate}
+          onDeleteSpaceRequest={handleSpaceDeleteRequest}
         />
       </div>
 
-      <div className="p-2">
+      <div className={`p-2 transition-opacity duration-300 ${isTransitioning ? 'opacity-50' : 'opacity-100'}`}>
         {isEmpty ? (
           <EmptyDashboard onAddWidget={() => setShowPluginSelector(true)} />
         ) : (
@@ -255,6 +321,14 @@ export function DashboardContent({ initialFrames }: DashboardContentProps) {
         <PluginSelector
           onSelect={handleAddFrame}
           onClose={() => setShowPluginSelector(false)}
+        />
+      )}
+
+      {spaceToDelete && (
+        <DeleteSpaceModal
+          spaceName={spaceToDelete.name}
+          onConfirm={handleSpaceDeleteConfirm}
+          onCancel={() => setSpaceToDelete(null)}
         />
       )}
     </div>

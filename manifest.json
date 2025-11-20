@@ -3,7 +3,7 @@
   "name": "Dashboard New Tab",
   "version": "1.0.2",
   "description": "A customizable dashboard",
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage", "tabs", "identity"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "icons": {
     "16": "icons/icon16.png",
