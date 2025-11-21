@@ -1,4 +1,5 @@
 import { AlertCircle, Loader2, Calendar, MapPin, Users, Clock, Link as LinkIcon, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { GoogleCalendarConfig, GoogleCalendarEvent } from './types';
 import { useEffect, useRef, useState } from 'react';
 import { PluginComponentProps } from '@/types/plugin';
@@ -34,9 +35,17 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
       try {
         const fetchedEvents = await fetchGoogleCalendarEvents(googleCalendarConfig);
         setEvents(fetchedEvents);
+        setError(null);
       } catch (err) {
         console.error('Failed to fetch calendar events:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load events.');
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load events.';
+        
+        // If authentication expired, show a helpful message
+        if (errorMessage.includes('Authentication expired') || errorMessage.includes('401')) {
+          setError('Authentication expired. Please reconnect to Google Calendar in the settings.');
+        } else {
+          setError(errorMessage);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -82,14 +91,35 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
 
     setSelectedEvent(event);
     
-    // Calculate popover position
+    // Calculate popover position (using getBoundingClientRect for portal)
     const rect = buttonElement.getBoundingClientRect();
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    const popoverWidth = 320; // w-80 = 320px
+    const popoverMaxHeight = window.innerHeight * 0.8; // max-h-[80vh]
+    const spacing = 8;
+    
+    // Calculate horizontal position
+    let left = rect.left;
+    // If popover would overflow on the right, align to the right of the button
+    if (left + popoverWidth > window.innerWidth - 10) {
+      left = rect.right - popoverWidth;
+    }
+    // Ensure it doesn't overflow on the left
+    left = Math.max(10, left);
+    
+    // Calculate vertical position
+    let top = rect.bottom + spacing;
+    // If popover would overflow at the bottom, position it above the button
+    if (top + popoverMaxHeight > window.innerHeight - 10) {
+      top = rect.top - popoverMaxHeight - spacing;
+      // If it would overflow at the top, center it vertically
+      if (top < 10) {
+        top = Math.max(10, (window.innerHeight - popoverMaxHeight) / 2);
+      }
+    }
     
     setPopoverPosition({
-      top: rect.bottom + scrollTop + 8,
-      left: rect.left + scrollLeft,
+      top,
+      left,
     });
   };
 
@@ -103,6 +133,69 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     }
     return '';
   };
+
+  // Convert URLs in text to clickable links
+  const renderTextWithLinks = (text: string): React.ReactNode => {
+    // URL regex pattern
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      
+      // Add the URL as a link
+      const url = match[0];
+      parts.push(
+        <a
+          key={match.index}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {url}
+        </a>
+      );
+      
+      lastIndex = match.index + url.length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+    
+    return parts.length > 0 ? <>{parts}</> : text;
+  };
+
+  // Calculate event position and height based on time
+  const getEventPosition = (event: GoogleCalendarEvent): { top: number; height: number } | null => {
+    if (!event.start.dateTime || !event.end?.dateTime) {
+      return null; // All-day events or events without time
+    }
+
+    const startDate = new Date(event.start.dateTime);
+    const endDate = new Date(event.end.dateTime);
+    
+    const startHour = startDate.getHours() + startDate.getMinutes() / 60;
+    const endHour = endDate.getHours() + endDate.getMinutes() / 60;
+    
+    // Each hour = 60px (adjust as needed)
+    const hourHeight = 60;
+    const top = startHour * hourHeight;
+    const height = (endHour - startHour) * hourHeight;
+    
+    return { top, height: Math.max(height, 30) }; // Minimum height of 30px
+  };
+
+  // Generate hours for timeline (0-23)
+  const hours = Array.from({ length: 24 }, (_, i) => i);
 
   // Check if an event is in the past
   const isEventPast = (event: GoogleCalendarEvent): boolean => {
@@ -149,7 +242,21 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
       if (currentEvent && eventRefs.current.has(currentEvent.id)) {
         const eventElement = eventRefs.current.get(currentEvent.id);
         if (eventElement) {
-          eventElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Calculate scroll position with a small margin at the top
+          const container = containerRef.current;
+          const eventRect = eventElement.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          const scrollTop = container.scrollTop;
+          const marginTop = 20; // Small margin in pixels
+          
+          // Calculate the target scroll position
+          const targetScrollTop = scrollTop + eventRect.top - containerRect.top - marginTop;
+          
+          // Scroll to position with margin
+          container.scrollTo({
+            top: Math.max(0, targetScrollTop),
+            behavior: 'smooth',
+          });
         }
       } else {
         // All events are past, scroll to bottom
@@ -243,11 +350,54 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
   const eventsByDay = groupEventsByDay(events);
 
   return (
-    <div ref={containerRef} className="h-full overflow-y-auto">
-      <div className="h-full p-4 box-border">
-        {/* Header with day labels for multi-day views */}
-        {googleCalendarConfig.period !== '1-day' && (
-          <div className="grid mb-4 gap-2" style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}>
+    <>
+      <div ref={containerRef} className="h-full overflow-y-auto">
+        <div className="h-full p-4 box-border">
+          {/* Header with day labels for multi-day views */}
+          {googleCalendarConfig.period !== '1-day' && (
+            <div className="grid mb-4 gap-2" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
+              <div></div> {/* Spacer for timeline column */}
+              {days.map((day) => {
+                // Format date as YYYY-MM-DD in local timezone
+                const year = day.getFullYear();
+                const month = String(day.getMonth() + 1).padStart(2, '0');
+                const date = String(day.getDate()).padStart(2, '0');
+                const dayKey = `${year}-${month}-${date}`;
+                const dayEvents = eventsByDay.get(dayKey) || [];
+                return (
+                  <div key={dayKey} className="text-center">
+                    <div className="text-sm font-semibold mb-1">
+                      {formatDate(dayKey)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {dayEvents.length} event{dayEvents.length !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Timeline and Events grid */}
+          <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
+            {/* Timeline column */}
+            <div className="relative" style={{ height: `${24 * 60}px` }}>
+              {hours.map((hour) => (
+                <div
+                  key={hour}
+                  className="absolute text-xs text-muted-foreground pr-2 text-right"
+                  style={{
+                    top: `${hour * 60}px`,
+                    height: '60px',
+                    width: '60px',
+                  }}
+                >
+                  {hour.toString().padStart(2, '0')}:00
+                </div>
+              ))}
+            </div>
+
+            {/* Day columns with events */}
             {days.map((day) => {
               // Format date as YYYY-MM-DD in local timezone
               const year = day.getFullYear();
@@ -255,39 +405,53 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
               const date = String(day.getDate()).padStart(2, '0');
               const dayKey = `${year}-${month}-${date}`;
               const dayEvents = eventsByDay.get(dayKey) || [];
+
               return (
-                <div key={dayKey} className="text-center">
-                  <div className="text-sm font-semibold mb-1">
-                    {formatDate(dayKey)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {dayEvents.length} event{dayEvents.length !== 1 ? 's' : ''}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Events grid */}
-        <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}>
-          {days.map((day) => {
-            // Format date as YYYY-MM-DD in local timezone
-            const year = day.getFullYear();
-            const month = String(day.getMonth() + 1).padStart(2, '0');
-            const date = String(day.getDate()).padStart(2, '0');
-            const dayKey = `${year}-${month}-${date}`;
-            const dayEvents = eventsByDay.get(dayKey) || [];
-
-            return (
-              <div key={dayKey} className="space-y-2 min-w-0">
-                {dayEvents.length === 0 ? (
-                  <div className="text-xs text-muted-foreground text-center py-4">
-                    No events
-                  </div>
-                ) : (
-                  dayEvents.map((event) => {
+                <div key={dayKey} className="relative min-w-0" style={{ height: `${24 * 60}px` }}>
+                  {/* Hour lines */}
+                  {hours.map((hour) => (
+                    <div
+                      key={hour}
+                      className="absolute border-t border-border/30"
+                      style={{
+                        top: `${hour * 60}px`,
+                        left: 0,
+                        right: 0,
+                        height: '1px',
+                      }}
+                    />
+                  ))}
+                  
+                  {/* Events positioned by time */}
+                  {dayEvents.map((event) => {
                     const isPast = isEventPast(event);
+                    const position = getEventPosition(event);
+                    
+                    // Handle all-day events
+                    if (!position) {
+                      return (
+                        <button
+                          key={event.id}
+                          ref={(el) => {
+                            if (el) {
+                              eventRefs.current.set(event.id, el);
+                            } else {
+                              eventRefs.current.delete(event.id);
+                            }
+                          }}
+                          onClick={(e) => handleEventClick(event, e.currentTarget)}
+                          className={`absolute top-0 left-0 right-0 text-left p-2 rounded-md border border-border transition-colors ${
+                            isPast
+                              ? 'bg-muted/50 text-muted-foreground opacity-60 hover:bg-muted/70'
+                              : 'bg-card hover:bg-accent'
+                          }`}
+                        >
+                          <div className="text-sm font-medium truncate">{event.summary || 'No title'}</div>
+                          <div className="text-xs text-muted-foreground">All day</div>
+                        </button>
+                      );
+                    }
+
                     return (
                       <button
                         key={event.id}
@@ -299,34 +463,40 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                           }
                         }}
                         onClick={(e) => handleEventClick(event, e.currentTarget)}
-                        className={`w-full text-left p-2 rounded-md border border-border transition-colors box-border ${
+                        className={`absolute left-0 right-0 text-left p-1.5 rounded border border-border transition-colors overflow-hidden ${
                           isPast
                             ? 'bg-muted/50 text-muted-foreground opacity-60 hover:bg-muted/70'
                             : 'bg-card hover:bg-accent'
                         }`}
+                        style={{
+                          top: `${position.top}px`,
+                          height: `${position.height}px`,
+                          minHeight: '30px',
+                        }}
                       >
-                        <div className="text-sm font-medium truncate">{event.summary || 'No title'}</div>
-                        <div className={`text-xs mt-1 ${isPast ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
+                        <div className="text-xs font-medium truncate">{event.summary || 'No title'}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
                           {formatTime(event.start.dateTime, event.start.date)}
                         </div>
                       </button>
                     );
-                  })
-                )}
-              </div>
-            );
-          })}
+                  })}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Event details popover */}
-      {selectedEvent && popoverPosition && (
+      {/* Event details popover - using portal to escape overflow container */}
+      {selectedEvent && popoverPosition && typeof document !== 'undefined' && createPortal(
         <div
           ref={popoverRef}
-          className="fixed z-50 w-80 max-w-[90vw] rounded-lg border border-border bg-card shadow-xl p-4 space-y-3 max-h-[80vh] overflow-y-auto"
+          className="fixed z-[9999] w-80 max-w-[90vw] rounded-lg border border-border bg-card shadow-xl p-4 space-y-3 max-h-[80vh] overflow-y-auto"
           style={{
-            top: `${Math.min(popoverPosition.top, window.innerHeight - 100)}px`,
-            left: `${Math.min(Math.max(popoverPosition.left, 10), window.innerWidth - 330)}px`,
+            top: `${Math.max(10, Math.min(popoverPosition.top, window.innerHeight - 20))}px`,
+            left: `${popoverPosition.left}px`,
+            maxHeight: `${Math.min(window.innerHeight - popoverPosition.top - 20, window.innerHeight * 0.8)}px`,
           }}
         >
           <div className="flex items-start justify-between">
@@ -368,7 +538,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
           {/* Description */}
           {selectedEvent.description && (
             <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {selectedEvent.description}
+              {renderTextWithLinks(selectedEvent.description)}
             </div>
           )}
 
@@ -426,9 +596,10 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
               <span>Open in Google Calendar</span>
             </a>
           )}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 

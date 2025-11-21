@@ -132,15 +132,106 @@ export async function checkGoogleAuth(): Promise<boolean> {
   });
 }
 
-// Fetch list of calendars
-export async function fetchGoogleCalendars(accessToken: string): Promise<GoogleCalendar[]> {
+// Check if token is valid and refresh if needed
+export async function ensureValidToken(accessToken: string | undefined): Promise<string> {
+  if (!accessToken) {
+    throw new Error('No access token available');
+  }
+
+  // Try to use Chrome Identity API to get a fresh token (it handles refresh automatically)
+  // This works best for extensions using getAuthToken (published extensions or with OAuth2 in manifest)
+  return new Promise((resolve) => {
+    const identity = getChromeIdentity();
+    
+    // Try to get a fresh token using Chrome Identity API
+    // Chrome automatically refreshes tokens obtained via getAuthToken
+    identity.getAuthToken(
+      {
+        interactive: false, // Don't prompt user, just try to refresh
+        scopes: [GOOGLE_SCOPES],
+      },
+      (token) => {
+        if (chrome.runtime.lastError) {
+          // If getAuthToken fails, the token might be from launchWebAuthFlow
+          // In that case, we can't refresh automatically and need to re-authenticate
+          // But first, try the stored token - it might still be valid
+          resolve(accessToken);
+          return;
+        }
+        if (token) {
+          // Got a fresh token from Chrome Identity API (automatically refreshed if needed)
+          resolve(token);
+        } else {
+          // Fallback to stored token
+          resolve(accessToken);
+        }
+      }
+    );
+  });
+}
+
+// Re-authenticate silently if possible
+export async function refreshTokenSilently(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const identity = getChromeIdentity();
+    
+    // Try to get a fresh token without user interaction
+    identity.getAuthToken(
+      {
+        interactive: false,
+        scopes: [GOOGLE_SCOPES],
+      },
+      (token) => {
+        if (chrome.runtime.lastError || !token) {
+          resolve(null);
+        } else {
+          resolve(token);
+        }
+      }
+    );
+  });
+}
+
+// Fetch list of calendars with automatic token refresh
+export async function fetchGoogleCalendars(accessToken: string | undefined): Promise<GoogleCalendar[]> {
+  let token = accessToken;
+  
+  // Try to get a fresh token first
+  try {
+    token = await ensureValidToken(accessToken);
+  } catch (error) {
+    // If token refresh fails, try with the original token
+    if (!token) {
+      throw error;
+    }
+  }
+
   const response = await fetch(GOOGLE_CALENDAR_LIST_URL, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token}`,
     },
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      // Token expired, try to refresh
+      try {
+        const freshToken = await ensureValidToken(accessToken);
+        // Retry with fresh token
+        const retryResponse = await fetch(GOOGLE_CALENDAR_LIST_URL, {
+          headers: {
+            Authorization: `Bearer ${freshToken}`,
+          },
+        });
+        if (!retryResponse.ok) {
+          throw new Error(`Failed to fetch calendars: ${retryResponse.statusText}`);
+        }
+        const data = await retryResponse.json();
+        return data.items || [];
+      } catch (refreshError) {
+        throw new Error('Authentication expired. Please reconnect to Google Calendar.');
+      }
+    }
     throw new Error(`Failed to fetch calendars: ${response.statusText}`);
   }
 
@@ -184,12 +275,24 @@ function getDateRange(period: string): { timeMin: string; timeMax: string } {
   };
 }
 
-// Fetch events for selected calendars
+// Fetch events for selected calendars with automatic token refresh
 export async function fetchGoogleCalendarEvents(
   config: GoogleCalendarConfig
 ): Promise<GoogleCalendarEvent[]> {
   if (!config.accessToken || !config.selectedCalendarIds || config.selectedCalendarIds.length === 0) {
     return [];
+  }
+
+  let token = config.accessToken;
+  
+  // Try to get a fresh token first
+  try {
+    token = await ensureValidToken(config.accessToken);
+  } catch (error) {
+    // If token refresh fails, try with the original token
+    if (!token) {
+      throw error;
+    }
   }
 
   const { timeMin, timeMax } = getDateRange(config.period);
@@ -205,11 +308,26 @@ export async function fetchGoogleCalendarEvents(
       url.searchParams.set('orderBy', 'startTime');
       url.searchParams.set('maxResults', '250');
 
-      const response = await fetch(url.toString(), {
+      let response = await fetch(url.toString(), {
         headers: {
-          Authorization: `Bearer ${config.accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
       });
+
+      // If token expired, try to refresh and retry
+      if (response.status === 401) {
+        try {
+          const freshToken = await ensureValidToken(config.accessToken);
+          response = await fetch(url.toString(), {
+            headers: {
+              Authorization: `Bearer ${freshToken}`,
+            },
+          });
+          token = freshToken; // Update token for subsequent requests
+        } catch (refreshError) {
+          throw new Error('Authentication expired. Please reconnect to Google Calendar.');
+        }
+      }
 
       if (!response.ok) {
         console.error(`Failed to fetch events for calendar ${calendarId}: ${response.statusText}`);
@@ -222,6 +340,10 @@ export async function fetchGoogleCalendarEvents(
       }
     } catch (error) {
       console.error(`Error fetching events for calendar ${calendarId}:`, error);
+      // If it's an auth error, rethrow it
+      if (error instanceof Error && error.message.includes('Authentication expired')) {
+        throw error;
+      }
     }
   }
 
