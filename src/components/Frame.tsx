@@ -183,7 +183,8 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
               target.tagName === 'A' ||
               target.closest('button') ||
               target.closest('input') ||
-              target.closest('a')) {
+              target.closest('a') ||
+              target.closest('[data-dnd-handle]')) {
             e.stopPropagation();
           }
         }}
