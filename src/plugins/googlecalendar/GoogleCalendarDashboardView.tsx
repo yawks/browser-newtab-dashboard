@@ -1,9 +1,10 @@
-import { AlertCircle, Loader2, Calendar, MapPin, Users, Clock, Link as LinkIcon, X } from 'lucide-react';
-import { createPortal } from 'react-dom';
+import { AlertCircle, Calendar, CheckCircle2, Circle, Clock, HelpCircle, Link as LinkIcon, Loader2, MapPin, Users, X, XCircle } from 'lucide-react';
 import { GoogleCalendarConfig, GoogleCalendarEvent } from './types';
-import { useEffect, useRef, useState } from 'react';
-import { PluginComponentProps } from '@/types/plugin';
 import { fetchGoogleCalendarEvents, groupEventsByDay } from './api';
+import { useEffect, useRef, useState } from 'react';
+
+import { PluginComponentProps } from '@/types/plugin';
+import { createPortal } from 'react-dom';
 
 export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
   const googleCalendarConfig: GoogleCalendarConfig = {
@@ -46,10 +47,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
       setError(null);
 
       try {
-        const fetchStartTime = performance.now();
         const fetchedEvents = await fetchGoogleCalendarEvents(googleCalendarConfig);
-        const fetchTime = performance.now() - fetchStartTime;
-        console.log(`[Calendar] Fetched ${fetchedEvents.length} events in ${fetchTime.toFixed(2)}ms`);
         setEvents(fetchedEvents);
         setError(null);
       } catch (err) {
@@ -152,44 +150,87 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     return '';
   };
 
-  // Convert URLs in text to clickable links
+  // Convert URLs in text to clickable links and \n to <br/>
   const renderTextWithLinks = (text: string): React.ReactNode => {
-    // URL regex pattern
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = urlRegex.exec(text)) !== null) {
-      // Add text before the URL
-      if (match.index > lastIndex) {
-        parts.push(text.substring(lastIndex, match.index));
+    if (!text) return text;
+    
+    // First, replace escaped \n with actual newlines
+    // Handle both \\n (escaped) and \n (literal newline characters)
+    let processedText = text.replace(/\\n/g, '\n');
+    
+    // Split by newlines (both \r\n and \n)
+    const lines = processedText.split(/\r?\n/);
+    const result: React.ReactNode[] = [];
+    
+    lines.forEach((line, lineIndex) => {
+      if (lineIndex > 0) {
+        result.push(<br key={`br-${lineIndex}`} />);
       }
       
-      // Add the URL as a link
-      const url = match[0];
-      parts.push(
-        <a
-          key={match.index}
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary hover:underline break-all"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {url}
-        </a>
-      );
+      // Skip empty lines unless they're not the first or last
+      if (line.trim() === '' && (lineIndex === 0 || lineIndex === lines.length - 1)) {
+        return;
+      }
       
-      lastIndex = match.index + url.length;
-    }
+      // URL regex pattern
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const parts: React.ReactNode[] = [];
+      let lastIndex = 0;
+      let match;
+
+      while ((match = urlRegex.exec(line)) !== null) {
+        // Add text before the URL
+        if (match.index > lastIndex) {
+          parts.push(line.substring(lastIndex, match.index));
+        }
+        
+        // Add the URL as a link
+        const url = match[0];
+        parts.push(
+          <a
+            key={`url-${lineIndex}-${match.index}`}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline break-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {url}
+          </a>
+        );
+        
+        lastIndex = match.index + url.length;
+      }
+      
+      // Add remaining text
+      if (lastIndex < line.length) {
+        parts.push(line.substring(lastIndex));
+      }
+      
+      if (parts.length > 0) {
+        result.push(<span key={`line-${lineIndex}`}>{parts}</span>);
+      } else if (line.trim() === '') {
+        // Preserve empty lines as spacing
+        result.push(<span key={`empty-${lineIndex}`}>&nbsp;</span>);
+      }
+    });
     
-    // Add remaining text
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
+    return result.length > 0 ? <>{result}</> : text;
+  };
+
+  // Get status icon and color for attendee response status
+  const getStatusIcon = (status?: string) => {
+    switch (status?.toUpperCase()) {
+      case 'ACCEPTED':
+        return { icon: CheckCircle2, color: 'text-green-500', label: 'Accepted' };
+      case 'DECLINED':
+        return { icon: XCircle, color: 'text-red-500', label: 'Declined' };
+      case 'TENTATIVE':
+        return { icon: HelpCircle, color: 'text-yellow-500', label: 'Tentative' };
+      case 'NEEDS-ACTION':
+      default:
+        return { icon: Circle, color: 'text-gray-400', label: 'No response' };
     }
-    
-    return parts.length > 0 ? <>{parts}</> : text;
   };
 
   // Calculate event position and height based on time
@@ -206,8 +247,9 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     
     // Each hour = 60px (adjust as needed)
     const hourHeight = 60;
+    const verticalSpacing = 4; // 4px spacing between consecutive events
     const top = startHour * hourHeight;
-    const height = (endHour - startHour) * hourHeight;
+    const height = (endHour - startHour) * hourHeight - verticalSpacing; // Reduce height to create spacing
     
     return { top, height: Math.max(height, 30) }; // Minimum height of 30px
   };
@@ -231,9 +273,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     const layout = new Map<string, { left: number; width: number }>();
     
     if (events.length === 0) return layout;
-    
-    const layoutStartTime = performance.now();
-    
+        
     // Separate timed events from all-day events
     const timedEvents = events.filter(e => e.start.dateTime && e.end?.dateTime);
     
@@ -253,6 +293,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
         }
       }
     }
+    
     
     // Find connected components (groups of overlapping events)
     const visited = new Set<string>();
@@ -313,14 +354,24 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
       // Calculate maximum columns in this component
       const maxColumns = Math.max(...Array.from(columns.values())) + 1;
       
-      // Calculate width and left position for each event
+      // Calculate width and left position for each event with spacing
+      // Use a fixed spacing percentage that's more visible
+      const spacingPercent = 4; // 4% spacing between overlapping events
+      const totalSpacingPercent = spacingPercent * (maxColumns - 1);
+      const availableWidth = 100 - totalSpacingPercent;
+      const eventWidth = availableWidth / maxColumns;
+      
       sortedEvents.forEach(event => {
         const column = columns.get(event.id)!;
-        const width = 100 / maxColumns;
-        const left = column * width;
+        // Calculate left position accounting for spacing
+        // Formula: left = column * (eventWidth + spacingPercent)
+        // This ensures each event is spaced by spacingPercent from the previous one
+        const left = column * (eventWidth + spacingPercent);
+        const width = eventWidth;
         
         layout.set(event.id, { left, width });
       });
+      
     });
     
     // Events without overlaps get full width
@@ -330,10 +381,6 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
       }
     });
     
-    const layoutEndTime = performance.now();
-    if (events.length > 10) {
-      console.log(`[Calendar Layout] Calculated layout for ${events.length} events in ${(layoutEndTime - layoutStartTime).toFixed(2)}ms`);
-    }
     
     return layout;
   };
@@ -351,6 +398,91 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     return endDate < now;
   };
 
+  // Get user's response status for an event
+  const getUserResponseStatus = (event: GoogleCalendarEvent): 'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'NEEDS-ACTION' | null => {
+    if (!event.attendees || event.attendees.length === 0) {
+      return null;
+    }
+
+    // Strategy to find user's response status:
+    // 1. PRIORITIZE TENTATIVE and DECLINED statuses (more specific, likely user's own response)
+    // 2. If only one attendee has a status, that's likely the user
+    // 3. Prefer non-organizer attendees with statuses
+    // 4. Fallback to organizer if no other status found
+    
+    const organizerEmail = event.organizer?.email?.toLowerCase();
+    
+    // Find all attendees with a response status (excluding NEEDS-ACTION)
+    const attendeesWithStatus = event.attendees.filter((attendee) => {
+      const status = attendee.responseStatus?.toUpperCase();
+      return status && status !== 'NEEDS-ACTION';
+    });
+
+    if (attendeesWithStatus.length === 0) {
+      return null;
+    }
+
+    // PRIORITY 1: If there's only one attendee with a status, that's likely the user
+    if (attendeesWithStatus.length === 1) {
+      const status = attendeesWithStatus[0].responseStatus?.toUpperCase();
+      if (status === 'ACCEPTED' || status === 'DECLINED' || status === 'TENTATIVE') {
+        return status as 'ACCEPTED' | 'DECLINED' | 'TENTATIVE';
+      }
+    }
+
+    // PRIORITY 2: Prioritize TENTATIVE and DECLINED (more specific statuses)
+    // These are more likely to be the user's own response, especially if different from organizer
+    const tentativeAttendee = attendeesWithStatus.find(
+      (attendee) => attendee.responseStatus?.toUpperCase() === 'TENTATIVE'
+    );
+    if (tentativeAttendee) {
+      return 'TENTATIVE';
+    }
+
+    const declinedAttendee = attendeesWithStatus.find(
+      (attendee) => attendee.responseStatus?.toUpperCase() === 'DECLINED'
+    );
+    if (declinedAttendee) {
+      return 'DECLINED';
+    }
+
+    // PRIORITY 3: If multiple attendees with status, prefer the one that's not the organizer
+    const nonOrganizerAttendee = attendeesWithStatus.find(
+      (attendee) => attendee.email?.toLowerCase() !== organizerEmail
+    );
+
+    if (nonOrganizerAttendee && nonOrganizerAttendee.responseStatus) {
+      const status = nonOrganizerAttendee.responseStatus.toUpperCase();
+      if (status === 'ACCEPTED' || status === 'DECLINED' || status === 'TENTATIVE') {
+        return status as 'ACCEPTED' | 'DECLINED' | 'TENTATIVE';
+      }
+    }
+
+    // PRIORITY 4: Check organizer if it's in attendees
+    if (organizerEmail) {
+      const organizerAttendee = event.attendees.find(
+        (attendee) => attendee.email?.toLowerCase() === organizerEmail
+      );
+      
+      if (organizerAttendee?.responseStatus) {
+        const status = organizerAttendee.responseStatus.toUpperCase();
+        if (status === 'ACCEPTED' || status === 'DECLINED' || status === 'TENTATIVE') {
+          return status as 'ACCEPTED' | 'DECLINED' | 'TENTATIVE';
+        }
+      }
+    }
+
+    // Fallback: use the first attendee with a status
+    if (attendeesWithStatus.length > 0 && attendeesWithStatus[0].responseStatus) {
+      const status = attendeesWithStatus[0].responseStatus.toUpperCase();
+      if (status === 'ACCEPTED' || status === 'DECLINED' || status === 'TENTATIVE') {
+        return status as 'ACCEPTED' | 'DECLINED' | 'TENTATIVE';
+      }
+    }
+
+    return null;
+  };
+
   // Find the current or next event (excluding all-day events)
   const findCurrentEvent = (events: GoogleCalendarEvent[]): GoogleCalendarEvent | null => {
     const now = new Date();
@@ -362,9 +494,12 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
         continue;
       }
       
+      const eventStart = event.start.dateTime ? new Date(event.start.dateTime) : null;
       const eventEnd = event.end?.dateTime || event.end?.date;
-      if (eventEnd) {
+      
+      if (eventStart && eventEnd) {
         const endDate = new Date(eventEnd);
+        // Event is current or future if it hasn't ended yet
         if (endDate >= now) {
           return event;
         }
@@ -396,17 +531,22 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
           // Calculate the target scroll position
           const targetScrollTop = scrollTop + eventRect.top - containerRect.top - marginTop;
           
-          // Scroll to position with margin
+          // Scroll to position with margin (without animation)
           container.scrollTo({
             top: Math.max(0, targetScrollTop),
-            behavior: 'smooth',
+            behavior: 'auto',
           });
         }
       } else {
-        // All events are past, scroll to bottom
+        // All events are past, scroll to current time instead of bottom (without animation)
+        const now = new Date();
+        const currentHour = now.getHours() + now.getMinutes() / 60;
+        const hourHeight = 60; // Each hour = 60px
+        const targetScrollTop = currentHour * hourHeight - 100; // 100px margin from top
+        
         containerRef.current.scrollTo({
-          top: containerRef.current.scrollHeight,
-          behavior: 'smooth',
+          top: Math.max(0, Math.min(targetScrollTop, containerRef.current.scrollHeight - containerRef.current.clientHeight)),
+          behavior: 'auto',
         });
       }
     }, 300);
@@ -575,8 +715,64 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                   {/* Events positioned by time */}
                   {dayEvents.map((event) => {
                     const isPast = isEventPast(event);
+                    const isCancelled = event.status === 'CANCELLED';
+                    const userResponseStatus = getUserResponseStatus(event);
                     const position = getEventPosition(event);
                     const layout = eventLayout.get(event.id) || { left: 0, width: 100 };
+                    
+                    // Determine background style based on user response
+                    let textClass = '';
+                    let backgroundStyle: React.CSSProperties = {};
+                    
+                    // Get CSS variable values for background colors
+                    const getCSSVarValue = (varName: string): string => {
+                      if (typeof window !== 'undefined' && document.documentElement) {
+                        const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+                        return value || '';
+                      }
+                      return '';
+                    };
+                    
+                    if (userResponseStatus === 'ACCEPTED') {
+                      // Use accent color for accepted events to make them stand out
+                      const accentColor = getCSSVarValue('--accent') || '210 40% 96.1%';
+                      backgroundStyle = { 
+                        backgroundColor: `hsl(${accentColor})`,
+                      };
+                    } else if (userResponseStatus === 'DECLINED') {
+                      // Use muted color with transparency for declined events
+                      const mutedColor = getCSSVarValue('--muted') || '210 40% 96.1%';
+                      backgroundStyle = { 
+                        backgroundColor: `hsl(${mutedColor} / 0.3)`,
+                      };
+                      textClass = 'line-through'; // Strikethrough text
+                    } else if (userResponseStatus === 'TENTATIVE') {
+                      // Use card color with a more visible hatch pattern for tentative events
+                      const cardColor = getCSSVarValue('--card') || '0 0% 100%';
+                      // Use a more visible pattern - check if dark mode
+                      const isDark = document.documentElement.classList.contains('dark');
+                      const hatchColor = isDark 
+                        ? 'rgba(255, 255, 255, 0.2)' // White lines in dark mode
+                        : 'rgba(0, 0, 0, 0.25)'; // Dark lines in light mode
+                      backgroundStyle = {
+                        backgroundColor: `hsl(${cardColor})`,
+                        backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 4px, ${hatchColor} 4px, ${hatchColor} 8px)`,
+                        backgroundSize: '12px 12px',
+                      };
+                    } else {
+                      // Default or NEEDS-ACTION - use card color
+                      if (isPast) {
+                        const mutedColor = getCSSVarValue('--muted') || '210 40% 96.1%';
+                        backgroundStyle = { 
+                          backgroundColor: `hsl(${mutedColor} / 0.5)`,
+                        };
+                      } else {
+                        const cardColor = getCSSVarValue('--card') || '0 0% 100%';
+                        backgroundStyle = { 
+                          backgroundColor: `hsl(${cardColor})`,
+                        };
+                      }
+                    }
                     
                     // Handle all-day events
                     if (!position) {
@@ -593,9 +789,14 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                           onClick={(e) => handleEventClick(event, e.currentTarget)}
                           className={`absolute top-0 left-0 right-0 text-left p-2 rounded-md border border-border transition-colors ${
                             isPast
-                              ? 'bg-muted/50 text-muted-foreground opacity-60 hover:bg-muted/70'
-                              : 'bg-card hover:bg-accent'
-                          }`}
+                              ? 'text-muted-foreground opacity-60'
+                              : ''
+                          } ${textClass} ${isCancelled ? 'line-through opacity-50' : ''}`}
+                          style={{
+                            backgroundColor: backgroundStyle.backgroundColor,
+                            backgroundImage: backgroundStyle.backgroundImage,
+                            backgroundSize: backgroundStyle.backgroundSize,
+                          }}
                         >
                           <div className="text-sm font-medium truncate">{event.summary || 'No title'}</div>
                           <div className="text-xs text-muted-foreground">All day</div>
@@ -609,6 +810,16 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                         ref={(el) => {
                           if (el) {
                             eventRefs.current.set(event.id, el);
+                            // Apply styles with !important to override any CSS
+                            if (backgroundStyle.backgroundColor) {
+                              el.style.setProperty('background-color', String(backgroundStyle.backgroundColor), 'important');
+                            }
+                            if (backgroundStyle.backgroundImage) {
+                              el.style.setProperty('background-image', String(backgroundStyle.backgroundImage), 'important');
+                            }
+                            if (backgroundStyle.backgroundSize) {
+                              el.style.setProperty('background-size', String(backgroundStyle.backgroundSize), 'important');
+                            }
                           } else {
                             eventRefs.current.delete(event.id);
                           }
@@ -616,15 +827,19 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                         onClick={(e) => handleEventClick(event, e.currentTarget)}
                         className={`absolute text-left p-1.5 rounded border border-border transition-colors overflow-hidden ${
                           isPast
-                            ? 'bg-muted/50 text-muted-foreground opacity-60 hover:bg-muted/70'
-                            : 'bg-card hover:bg-accent'
-                        }`}
+                            ? 'text-muted-foreground opacity-60'
+                            : ''
+                        } ${textClass} ${isCancelled ? 'line-through opacity-50' : ''}`}
                         style={{
                           top: `${position.top}px`,
                           height: `${position.height}px`,
                           minHeight: '30px',
                           left: `${layout.left}%`,
                           width: `${layout.width}%`,
+                          // Also apply in style prop as fallback
+                          backgroundColor: backgroundStyle.backgroundColor,
+                          backgroundImage: backgroundStyle.backgroundImage,
+                          backgroundSize: backgroundStyle.backgroundSize,
                         }}
                       >
                         <div className="text-xs font-medium truncate">{event.summary || 'No title'}</div>
@@ -690,50 +905,69 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
 
           {/* Description */}
           {selectedEvent.description && (
-            <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+            <div className="text-sm text-muted-foreground">
               {renderTextWithLinks(selectedEvent.description)}
             </div>
           )}
 
-          {/* Organizer */}
-          {selectedEvent.organizer && (
-            <div className="flex items-start gap-2 text-sm">
-              <Calendar className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div>
-                <div className="text-xs text-muted-foreground">Organizer</div>
-                <div className="font-medium">
-                  {selectedEvent.organizer.displayName || selectedEvent.organizer.email}
+          {/* Separator before participants */}
+          {(selectedEvent.organizer || (selectedEvent.attendees && selectedEvent.attendees.length > 0)) && (
+            <div className="border-t border-border pt-3 mt-3">
+              {/* Organizer */}
+              {selectedEvent.organizer && (
+                <div className="flex items-center gap-2 text-sm mb-2">
+                  <Calendar className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-xs text-muted-foreground mb-0.5">Organizer</div>
+                    <div className="font-medium">
+                      {selectedEvent.organizer.displayName || selectedEvent.organizer.email}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          {/* Attendees */}
-          {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
-            <div className="flex items-start gap-2 text-sm">
-              <Users className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <div className="text-xs text-muted-foreground mb-1">
-                  Attendees ({selectedEvent.attendees.length})
+              {/* Attendees */}
+              {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                    <Users className="w-4 h-4 flex-shrink-0" />
+                    <span>Attendees ({selectedEvent.attendees.length})</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {selectedEvent.attendees.map((attendee, idx) => {
+                      const statusInfo = getStatusIcon(attendee.responseStatus);
+                      const StatusIcon = statusInfo.icon;
+                      const isOrganizer = selectedEvent.organizer?.email === attendee.email;
+                      
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <div title={statusInfo.label} className="flex-shrink-0">
+                            <StatusIcon
+                              className={`w-4 h-4 ${statusInfo.color}`}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={`truncate ${isOrganizer ? 'font-medium text-blue-600' : ''}`}>
+                              {attendee.displayName || attendee.email}
+                              {isOrganizer && (
+                                <span className="text-xs text-muted-foreground ml-1">(Organizer)</span>
+                              )}
+                            </div>
+                            {attendee.email && attendee.displayName && (
+                              <div className="text-xs text-muted-foreground truncate">
+                                {attendee.email}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  {selectedEvent.attendees.slice(0, 5).map((attendee, idx) => (
-                    <div key={idx} className="text-xs">
-                      {attendee.displayName || attendee.email}
-                      {attendee.responseStatus && (
-                        <span className="text-muted-foreground ml-2">
-                          ({attendee.responseStatus})
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                  {selectedEvent.attendees.length > 5 && (
-                    <div className="text-xs text-muted-foreground">
-                      +{selectedEvent.attendees.length - 5} more
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           )}
 
