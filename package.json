@@ -8,10 +8,10 @@
     "build": "tsc && vite build && npm run copy-manifest && npm run copy-icons",
     "build:chrome": "tsc && vite build && npm run copy-manifest:chrome && npm run copy-icons",
     "build:firefox": "tsc && vite build && npm run copy-manifest:firefox && npm run copy-icons",
-    "copy-manifest": "cp manifest.json dist/",
-    "copy-manifest:chrome": "cp manifest.json dist/",
-    "copy-manifest:firefox": "cp manifest.firefox.json dist/manifest.json",
-    "copy-icons": "mkdir -p dist/icons && cp icons/*.png dist/icons/ 2>/dev/null || echo 'Warning: PNG icons not found. Run npm run generate-icons first.'",
+    "copy-manifest": "shx cp manifest.json dist/",
+    "copy-manifest:chrome": "shx cp manifest.json dist/",
+    "copy-manifest:firefox": "shx cp manifest.firefox.json dist/manifest.json",
+    "copy-icons": "shx mkdir -p dist/icons && shx cp icons/*.png dist/icons/ || echo 'Warning: PNG icons not found. Run npm run generate-icons first.'",
     "generate-icons": "node scripts/generate-icons.mjs",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
@@ -40,6 +40,7 @@
     "eslint-plugin-react-refresh": "^0.4.5",
     "postcss": "^8.4.32",
     "sharp": "^0.32.6",
+    "shx": "^0.4.0",
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
