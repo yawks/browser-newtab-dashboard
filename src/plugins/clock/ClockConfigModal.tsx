@@ -4,6 +4,7 @@ import { ClockConfig, ClockFormat, ClockTheme } from './types';
 import { createPortal } from 'react-dom';
 import { getSystemTimezone } from './api';
 import { useState } from 'react';
+import {ClockView} from './ClockView';
 
 const THEMES: { id: ClockTheme; label: string; category: 'digital' | 'analog' }[] = [
   { id: 'digital-simple', label: 'Digital Simple', category: 'digital' },
@@ -130,6 +131,23 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Preview */}
+          <div>
+          <label className='text-sm font-medium block mb-2'>Preview</label>
+            <div className='border border-border rounded-lg mb-2'>
+              <ClockView clockConfig={{
+                theme,
+                timezone: timezone || undefined,
+                showDate,
+                format,
+                showSunrise,
+                showSunset,
+                latitude: parseFloat(latitude),
+                longitude: parseFloat(longitude)
+              }}/>
+            </div>
+          </div>
+
           {/* Theme Selection */}
           <div>
             <label className="text-sm font-medium mb-2 block">Theme</label>
