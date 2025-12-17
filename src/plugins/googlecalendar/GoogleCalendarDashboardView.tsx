@@ -16,6 +16,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     userEmail: (config as unknown as GoogleCalendarConfig)?.userEmail,
   };
 
+
   const [events, setEvents] = useState<GoogleCalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +25,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const eventRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const timelineRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -332,6 +334,19 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     return endDate < now;
   };
 
+  // Check if an event is currently ongoing
+  const isEventOngoing = (event: GoogleCalendarEvent): boolean => {
+    if (!event.start.dateTime || !event.end?.dateTime) {
+      return false; // All-day events or events without time cannot be "ongoing"
+    }
+    
+    const now = new Date();
+    const startDate = new Date(event.start.dateTime);
+    const endDate = new Date(event.end.dateTime);
+    
+    return startDate <= now && now <= endDate;
+  };
+
   // Get user's response status for an event
   const getUserResponseStatus = (event: GoogleCalendarEvent): 'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'NEEDS-ACTION' | null => {
     if (!event.attendees || event.attendees.length === 0) {
@@ -359,76 +374,38 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     return null;
   };
 
-  // Find the current or next event (excluding all-day events)
-  const findCurrentEvent = (events: GoogleCalendarEvent[]): GoogleCalendarEvent | null => {
-    const now = new Date();
-    
-    // Find the first event that hasn't ended yet (excluding all-day events)
-    for (const event of events) {
-      // Skip all-day events (they have date but no dateTime)
-      if (event.start.date && !event.start.dateTime) {
-        continue;
-      }
-      
-      const eventStart = event.start.dateTime ? new Date(event.start.dateTime) : null;
-      const eventEnd = event.end?.dateTime || event.end?.date;
-      
-      if (eventStart && eventEnd) {
-        const endDate = new Date(eventEnd);
-        // Event is current or future if it hasn't ended yet
-        if (endDate >= now) {
-          return event;
-        }
-      }
-    }
-    
-    return null;
-  };
-
-  // Auto-scroll to current event after events are loaded
+  // Auto-scroll to current time after events are loaded
   useEffect(() => {
-    if (events.length === 0 || !containerRef.current || isLoading) return;
-    
-    // Wait for DOM to update with event elements
-    const scrollTimeout = setTimeout(() => {
+    if (!containerRef.current || isLoading) return;
+
+    const scrollToCurrentTime = () => {
       if (!containerRef.current) return;
-      
-      const currentEvent = findCurrentEvent(events);
-      if (currentEvent && eventRefs.current.has(currentEvent.id)) {
-        const eventElement = eventRefs.current.get(currentEvent.id);
-        if (eventElement) {
-          // Calculate scroll position with a small margin at the top
-          const container = containerRef.current;
-          const eventRect = eventElement.getBoundingClientRect();
-          const containerRect = container.getBoundingClientRect();
-          const scrollTop = container.scrollTop;
-          const marginTop = 20; // Small margin in pixels
-          
-          // Calculate the target scroll position
-          const targetScrollTop = scrollTop + eventRect.top - containerRect.top - marginTop;
-          
-          // Scroll to position with margin (without animation)
-          container.scrollTo({
-            top: Math.max(0, targetScrollTop),
-            behavior: 'auto',
-          });
-        }
-      } else {
-        // All events are past, scroll to current time instead of bottom (without animation)
-        const now = new Date();
-        const currentHour = now.getHours() + now.getMinutes() / 60;
-        const hourHeight = 60; // Each hour = 60px
-        const targetScrollTop = currentHour * hourHeight - 100; // 100px margin from top
-        
-        containerRef.current.scrollTo({
-          top: Math.max(0, Math.min(targetScrollTop, containerRef.current.scrollHeight - containerRef.current.clientHeight)),
-          behavior: 'auto',
-        });
-      }
-    }, 300);
-    
-    return () => clearTimeout(scrollTimeout);
-  }, [events, isLoading]);
+      const now = new Date();
+      const currentHour = now.getHours() + now.getMinutes() / 60;
+      const hourHeight = 60; // Each hour = 60px
+      const marginTop = 30; // Keep a small margin from the top
+      const timelineTop = timelineRef.current ? timelineRef.current.offsetTop : 0;
+      const targetScrollTop = timelineTop + currentHour * hourHeight - marginTop;
+
+
+      containerRef.current.scrollTo({
+        top: Math.max(0, Math.min(targetScrollTop, containerRef.current.scrollHeight - containerRef.current.clientHeight)),
+        behavior: 'auto',
+      });
+    };
+
+    // First attempt immediately after render
+    scrollToCurrentTime();
+    // Second attempt after DOM/layout settles
+    const timeoutId = setTimeout(scrollToCurrentTime, 0);
+    // Third attempt slightly later to override any layout jumps
+    const timeoutId2 = setTimeout(scrollToCurrentTime, 400);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearTimeout(timeoutId2);
+    };
+  }, [isLoading, events.length, googleCalendarConfig.period]);
 
   const formatDate = (dateString: string): string => {
     // dateString is in format YYYY-MM-DD
@@ -546,7 +523,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
           {/* Timeline and Events grid */}
           <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
             {/* Timeline column */}
-            <div className="relative" style={{ height: `${24 * 60}px` }}>
+            <div ref={timelineRef} className="relative" style={{ height: `${24 * 60}px` }}>
               {hours.map((hour) => (
                 <div
                   key={hour}
@@ -591,13 +568,15 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                   {/* Events positioned by time */}
                   {dayEvents.map((event) => {
                     const isPast = isEventPast(event);
+                    const isOngoing = isEventOngoing(event);
                     const isCancelled = event.status === 'CANCELLED';
                     const userResponseStatus = getUserResponseStatus(event);
                     const position = getEventPosition(event);
                     const layout = eventLayout.get(event.id) || { left: 0, width: 100 };
                     
-                    // Determine background style based on user response
+                    // Determine background style based on user response and ongoing status
                     let textClass = '';
+                    let textStyle: React.CSSProperties = {};
                     let backgroundStyle: React.CSSProperties = {};
                     
                     // Get CSS variable values for background colors
@@ -609,7 +588,25 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                       return '';
                     };
                     
-                    if (userResponseStatus === 'ACCEPTED') {
+                    // Check if dark mode
+                    const isDark = typeof window !== 'undefined' && document.documentElement.classList.contains('dark');
+                    
+                    // Priority: ongoing events get blue color, then user response status
+                    if (isOngoing) {
+                      // Blue color for ongoing events - adapt to light/dark mode
+                      // Light mode: blue-500 (hsl(217, 91%, 60%))
+                      // Dark mode: blue-400 (hsl(217, 91%, 70%))
+                      const blueColor = isDark 
+                        ? 'hsl(217, 91%, 70%)' // Lighter blue for dark mode
+                        : 'hsl(217, 91%, 60%)'; // Darker blue for light mode
+                      backgroundStyle = { 
+                        backgroundColor: blueColor,
+                      };
+                      // Use dark text on light blue background (dark mode) or light text on dark blue (light mode)
+                      textStyle = {
+                        color: isDark ? 'hsl(0, 0%, 10%)' : 'hsl(0, 0%, 100%)', // Dark text in dark mode, white text in light mode
+                      };
+                    } else if (userResponseStatus === 'ACCEPTED') {
                       // Use accent color for accepted events to make them stand out
                       const accentColor = getCSSVarValue('--accent') || '210 40% 96.1%';
                       backgroundStyle = { 
@@ -626,7 +623,6 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                       // Use card color with a more visible hatch pattern for tentative events
                       const cardColor = getCSSVarValue('--card') || '0 0% 100%';
                       // Use a more visible pattern - check if dark mode
-                      const isDark = document.documentElement.classList.contains('dark');
                       const hatchColor = isDark 
                         ? 'rgba(255, 255, 255, 0.2)' // White lines in dark mode
                         : 'rgba(0, 0, 0, 0.25)'; // Dark lines in light mode
@@ -658,6 +654,19 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                           ref={(el) => {
                             if (el) {
                               eventRefs.current.set(event.id, el);
+                              // Apply styles with !important to override any CSS
+                              if (backgroundStyle.backgroundColor) {
+                                el.style.setProperty('background-color', String(backgroundStyle.backgroundColor), 'important');
+                              }
+                              if (backgroundStyle.backgroundImage) {
+                                el.style.setProperty('background-image', String(backgroundStyle.backgroundImage), 'important');
+                              }
+                              if (backgroundStyle.backgroundSize) {
+                                el.style.setProperty('background-size', String(backgroundStyle.backgroundSize), 'important');
+                              }
+                              if (textStyle.color) {
+                                el.style.setProperty('color', String(textStyle.color), 'important');
+                              }
                             } else {
                               eventRefs.current.delete(event.id);
                             }
@@ -672,10 +681,11 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                             backgroundColor: backgroundStyle.backgroundColor,
                             backgroundImage: backgroundStyle.backgroundImage,
                             backgroundSize: backgroundStyle.backgroundSize,
+                            color: textStyle.color,
                           }}
                         >
-                          <div className="text-sm font-medium truncate">{event.summary || 'No title'}</div>
-                          <div className="text-xs text-muted-foreground">All day</div>
+                          <div className="text-sm font-medium truncate" style={{ color: textStyle.color || 'inherit' }}>{event.summary || 'No title'}</div>
+                          <div className="text-xs" style={{ color: textStyle.color ? (isDark ? 'hsl(0, 0%, 25%)' : 'hsl(0, 0%, 85%)') : undefined }}>All day</div>
                         </button>
                       );
                     }
@@ -695,6 +705,9 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                             }
                             if (backgroundStyle.backgroundSize) {
                               el.style.setProperty('background-size', String(backgroundStyle.backgroundSize), 'important');
+                            }
+                            if (textStyle.color) {
+                              el.style.setProperty('color', String(textStyle.color), 'important');
                             }
                           } else {
                             eventRefs.current.delete(event.id);
@@ -716,10 +729,11 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                           backgroundColor: backgroundStyle.backgroundColor,
                           backgroundImage: backgroundStyle.backgroundImage,
                           backgroundSize: backgroundStyle.backgroundSize,
+                          color: textStyle.color,
                         }}
                       >
-                        <div className="text-xs font-medium truncate">{event.summary || 'No title'}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                        <div className="text-xs font-medium truncate" style={{ color: textStyle.color || 'inherit' }}>{event.summary || 'No title'}</div>
+                        <div className="text-[10px] mt-0.5" style={{ color: textStyle.color ? (isDark ? 'hsl(0, 0%, 25%)' : 'hsl(0, 0%, 85%)') : undefined }}>
                           {formatTime(event.start.dateTime, event.start.date)}
                         </div>
                       </button>

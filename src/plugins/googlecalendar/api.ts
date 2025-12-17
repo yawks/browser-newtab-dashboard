@@ -6,6 +6,7 @@ interface RecurrenceInfo {
   exdate?: string[];
   status?: string;
   recurrenceId?: string; // RECURRENCE-ID for modified instances
+  recurrenceIdTzid?: string; // Timezone for RECURRENCE-ID if provided
 }
 
 // Decode iCal escape sequences: \\ -> \, \, -> ,, \; -> ;, \n -> newline
@@ -77,6 +78,10 @@ function parseICal(icalText: string): GoogleCalendarEvent[] {
       if (recurrenceInfo.recurrenceId) {
         // This is a modified instance - add it directly with a special ID
         baseEvent.id = `${baseEvent.id}-recurrence-${recurrenceInfo.recurrenceId}`;
+        // Preserve recurrence-id timezone info for deduplication
+        if (recurrenceInfo.recurrenceIdTzid) {
+          (baseEvent as any).recurrenceIdTzid = recurrenceInfo.recurrenceIdTzid;
+        }
         events.push(baseEvent);
       } else if (recurrenceInfo.rrule && baseEvent.start.dateTime) {
         // If there's a RRULE, generate recurring occurrences
@@ -238,6 +243,7 @@ function parseICal(icalText: string): GoogleCalendarEvent[] {
       } else if (line.startsWith('RECURRENCE-ID')) {
         const match = line.match(/RECURRENCE-ID(?:;TZID=([^:]+))?:(.+)/);
         if (match) {
+          recurrenceInfo.recurrenceIdTzid = match[1]?.trim();
           recurrenceInfo.recurrenceId = match[2].trim();
         }
       } else if (line.startsWith('EXDATE')) {
@@ -282,6 +288,31 @@ function parseICalDateTime(value: string, tzid?: string): Date {
   }
 }
 
+// Format a date into a timezone-aware key: YYYYMMDDTHHMM (wall time)
+function formatDateKey(dateInput: string | Date, tzid?: string): string {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  if (Number.isNaN(date.getTime())) return '';
+  if (!tzid) {
+    return date.toISOString().substring(0, 16).replace(/[-:]/g, '');
+  }
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tzid,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value || '';
+  const y = get('year');
+  const m = get('month');
+  const d = get('day');
+  const h = get('hour');
+  const min = get('minute');
+  return `${y}${m}${d}T${h}${min}`;
+}
+
 // Parse EXDATE to Date objects
 function parseExDates(exdates: string[]): Set<string> {
   const excludedDates = new Set<string>();
@@ -308,6 +339,7 @@ function generateRecurringEvents(
   if (!baseEvent.start.dateTime) {
     return [baseEvent]; // Can't generate recurrences without a start time
   }
+
 
   const startDate = new Date(baseEvent.start.dateTime);
   const endDate = baseEvent.end?.dateTime ? new Date(baseEvent.end.dateTime) : null;
@@ -368,9 +400,11 @@ function generateRecurringEvents(
         id: `${baseEvent.id}-${occurrenceCount}`,
         start: {
           dateTime: occurrenceStart.toISOString(),
+          ...(baseEvent.start as any)?.timeZone ? { timeZone: (baseEvent.start as any).timeZone } : {},
         },
         end: {
           dateTime: occurrenceEnd.toISOString(),
+          ...(baseEvent.end as any)?.timeZone ? { timeZone: (baseEvent.end as any).timeZone } : {},
         },
         // Keep status if it's CANCELLED (for declined events)
         status: baseEvent.status,
@@ -378,6 +412,7 @@ function generateRecurringEvents(
         attendees: baseEvent.attendees,
         organizer: baseEvent.organizer,
       };
+
 
       occurrences.push(occurrence);
       occurrenceCount++;
@@ -713,23 +748,46 @@ async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleC
     }
     
     let allEvents = parseICal(icalText);
-    
+
     // Deduplicate events: if there's a RECURRENCE-ID event, remove the corresponding generated occurrence
     // Events with RECURRENCE-ID have IDs like "uid-recurrence-20251215T140000"
     // Generated occurrences have IDs like "uid-0", "uid-1", etc.
+    // We match on base UID + original occurrence start (wall time in the proper TZ) to avoid duplicates when an instance is rescheduled.
     const recurrenceIdMap = new Map<string, GoogleCalendarEvent>();
     const regularEvents: GoogleCalendarEvent[] = [];
+    const buildOccurrenceKey = (baseUid: string, dateValue: Date | string, tzid?: string): string =>
+      `${baseUid}-${formatDateKey(dateValue, tzid || 'Europe/Paris')}`; // Default to Europe/Paris for consistency
     
     for (const event of allEvents) {
       if (event.id.includes('-recurrence-')) {
-        // Extract the base UID and recurrence date from the ID
+        // Extract the base UID from the ID
         const match = event.id.match(/^(.+)-recurrence-(.+)$/);
         if (match) {
           const baseUid = match[1];
-          const recurrenceDate = match[2];
-          // Use base UID + date as key to match with generated occurrences
-          const key = `${baseUid}-${recurrenceDate.substring(0, 8)}`; // Use date part only (YYYYMMDD)
-          recurrenceIdMap.set(key, event);
+          // Prefer the RECURRENCE-ID value (original occurrence start) if present
+          const recurrenceIdValue = event.id.split('-recurrence-')[1];
+          let occurrenceDate: Date | null = null;
+
+          if (recurrenceIdValue) {
+            // If we stored tzid during parsing, try to parse with it
+            const tzid = (event as any).recurrenceIdTzid as string | undefined;
+            try {
+              occurrenceDate = parseICalDateTime(recurrenceIdValue, tzid);
+            } catch {
+              occurrenceDate = null;
+            }
+          }
+
+          // Fallback to the event's own start date
+          if (!occurrenceDate && event.start.dateTime) {
+            occurrenceDate = new Date(event.start.dateTime);
+          }
+
+          if (occurrenceDate) {
+            const tz = (event.start as any)?.timeZone || (event as any).recurrenceIdTzid;
+            const key = buildOccurrenceKey(baseUid, occurrenceDate, tz);
+            recurrenceIdMap.set(key, event);
+          }
         }
       } else {
         regularEvents.push(event);
@@ -741,12 +799,12 @@ async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleC
       // Check if this event's date matches a RECURRENCE-ID event
       if (event.start.dateTime) {
         const eventDate = new Date(event.start.dateTime);
-        const dateKey = eventDate.toISOString().substring(0, 10).replace(/-/g, ''); // YYYYMMDD
         // Extract base UID (everything before the last dash and number)
         const uidMatch = event.id.match(/^(.+?)-(\d+)$/);
         if (uidMatch) {
           const baseUid = uidMatch[1];
-          const key = `${baseUid}-${dateKey}`;
+          const tz = (event.start as any)?.timeZone || 'Europe/Paris'; // Use same tz as RECURRENCE-ID
+          const key = buildOccurrenceKey(baseUid, eventDate, tz);
           if (recurrenceIdMap.has(key)) {
             // This occurrence is replaced by a RECURRENCE-ID event, exclude it
             return false;
