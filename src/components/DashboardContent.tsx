@@ -1,4 +1,4 @@
-import { DashboardData, FrameData, SpaceData, deleteSpace, saveSpaceFrames, setActiveSpace } from '@/lib/storage';
+import { DashboardData, FrameData, SpaceData, deleteSpace, saveSpaceFrames, setActiveSpace, loadTheme, saveTheme } from '@/lib/storage';
 import { Layout, WidthProvider } from 'react-grid-layout';
 import { useEffect, useRef, useState } from 'react';
 
@@ -386,20 +386,28 @@ export function DashboardContent({ initialData }: DashboardContentProps) {
     updateActiveSpaceFrames(newFrames);
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    const theme = await loadTheme();
     const exportData = {
-      version: '1.0.3',
+      version: '1.0.4',
       exportDate: new Date().toISOString(),
-      frames: frames.map((frame) => ({
-        id: frame.id,
-        pluginId: frame.pluginId,
-        name: frame.name,
-        x: frame.x,
-        y: frame.y,
-        w: frame.w,
-        h: frame.h,
-        config: frame.config,
+      theme,
+      spaces: spaces.map((space) => ({
+        id: space.id,
+        name: space.name,
+        frames: space.frames.map((frame) => ({
+          id: frame.id,
+          pluginId: frame.pluginId,
+          name: frame.name,
+          x: frame.x,
+          y: frame.y,
+          w: frame.w,
+          h: frame.h,
+          config: frame.config,
+          isNsfw: frame.isNsfw,
+        })),
       })),
+      activeSpaceId,
     };
 
     const dataStr = JSON.stringify(exportData, null, 2);
@@ -423,34 +431,110 @@ export function DashboardContent({ initialData }: DashboardContentProps) {
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         try {
           const content = event.target?.result as string;
           const importData = JSON.parse(content);
 
-          // Validate the import data structure
-          if (!importData.frames || !Array.isArray(importData.frames)) {
-            alert('Invalid export file format. Expected a "frames" array.');
+          let importedSpaces: SpaceData[] = [];
+          let importedActiveSpaceId: string = '';
+          let importedTheme: string | undefined;
+
+          // Handle new format (v1.0.4+) with spaces and theme
+          if (importData.spaces && Array.isArray(importData.spaces)) {
+            importedSpaces = importData.spaces.map((space: any) => ({
+              id: space.id,
+              name: space.name,
+              frames: space.frames || [],
+            }));
+
+            importedActiveSpaceId = importData.activeSpaceId || importedSpaces[0]?.id || '';
+            importedTheme = importData.theme;
+
+            // Validate spaces
+            if (importedSpaces.length === 0) {
+              alert('No valid spaces found in the import file.');
+              return;
+            }
+
+            // Validate active space exists
+            if (!importedActiveSpaceId || !importedSpaces.find((s: SpaceData) => s.id === importedActiveSpaceId)) {
+              importedActiveSpaceId = importedSpaces[0].id;
+            }
+
+            // Confirm import
+            const spaceCount = importedSpaces.length;
+            const frameCount = importedSpaces.reduce((total, space) => total + space.frames.length, 0);
+
+            if (!confirm(`This will replace all your current spaces with ${spaceCount} space(s) containing ${frameCount} widget(s) in total. Continue?`)) {
+              return;
+            }
+          }
+          // Handle legacy format (frames only)
+          else if (importData.frames && Array.isArray(importData.frames)) {
+            // Validate each frame has required fields
+            const validFrames = importData.frames.filter((frame: FrameData) =>
+              frame.id && frame.pluginId && typeof frame.x === 'number' &&
+              typeof frame.y === 'number' && typeof frame.w === 'number' &&
+              typeof frame.h === 'number' && frame.config
+            );
+
+            if (validFrames.length === 0) {
+              alert('No valid frames found in the import file.');
+              return;
+            }
+
+            // Confirm import
+            if (!confirm(`This will replace your current space with ${validFrames.length} frame(s). Continue?`)) {
+              return;
+            }
+
+            // Create a default space with imported frames
+            importedSpaces = [{
+              id: 'imported-space',
+              name: 'Imported',
+              frames: validFrames,
+            }];
+            importedActiveSpaceId = 'imported-space';
+          } else {
+            alert('Invalid export file format. Expected "spaces" array or legacy "frames" array.');
             return;
           }
 
-          // Validate each frame has required fields
-          const validFrames = importData.frames.filter((frame: FrameData) => 
-            frame.id && frame.pluginId && typeof frame.x === 'number' && 
-            typeof frame.y === 'number' && typeof frame.w === 'number' && 
-            typeof frame.h === 'number' && frame.config
-          );
+          // Update dashboard data
+          const newDashboardData: DashboardData = {
+            spaces: importedSpaces,
+            activeSpaceId: importedActiveSpaceId,
+          };
 
-          if (validFrames.length === 0) {
-            alert('No valid frames found in the import file.');
-            return;
+          // Save the new dashboard data
+          await new Promise<void>((resolve) => {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+              chrome.storage.local.set({ 'dashboard_data': JSON.stringify(newDashboardData) }, () => {
+                resolve();
+              });
+            } else {
+              localStorage.setItem('dashboard_data', JSON.stringify(newDashboardData));
+              resolve();
+            }
+          });
+
+          // Update local state
+          setSpaces(importedSpaces);
+          setActiveSpaceId(importedActiveSpaceId);
+
+          // Save theme if provided
+          if (importedTheme && (importedTheme === 'light' || importedTheme === 'dark')) {
+            await saveTheme(importedTheme as 'light' | 'dark');
+            // Apply theme immediately to the DOM
+            if (importedTheme === 'dark') {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
           }
 
-          // Confirm import
-          if (confirm(`This will replace your current space with ${validFrames.length} frame(s). Continue?`)) {
-            updateActiveSpaceFrames(validFrames);
-            alert('Dashboard imported successfully!');
-          }
+          alert('Dashboard imported successfully!');
         } catch (error) {
           console.error('Import error:', error);
           alert('Failed to import dashboard. The file may be corrupted or invalid.');
