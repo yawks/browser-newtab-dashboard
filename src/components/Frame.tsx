@@ -154,6 +154,7 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
             }`}
             title={isEditing ? 'View mode' : 'Edit mode'}
             type="button"
+            disabled={frame.isNsfw}
           >
             <Settings className="w-4 h-4" />
           </button>
