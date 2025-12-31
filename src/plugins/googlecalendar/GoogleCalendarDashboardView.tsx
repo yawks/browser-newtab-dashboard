@@ -496,7 +496,6 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                   eventRefs={eventRefs}
                 />
               );
-              );
             })}
           </div>
         </div>
