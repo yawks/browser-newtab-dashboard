@@ -303,6 +303,39 @@ export function getDaysForPeriod(period: string): Date[] {
 }
 
 /**
+ * Build a month grid (array of weeks, each week is an array of 7 Date objects).
+ * weekStartsOnMonday - if true, the first column is Monday, otherwise Sunday.
+ */
+export function getMonthGrid(date: Date, weekStartsOnMonday = true): Date[][] {
+  const firstOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+  const lastOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+  // JavaScript: 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const firstDayIndex = firstOfMonth.getDay();
+  const startOffset = weekStartsOnMonday ? (firstDayIndex === 0 ? 6 : firstDayIndex - 1) : firstDayIndex;
+
+  const startDate = new Date(firstOfMonth);
+  startDate.setDate(firstOfMonth.getDate() - startOffset);
+
+  const weeks: Date[][] = [];
+  let current = new Date(startDate);
+
+  while (current <= lastOfMonth || weeks.length === 0 || weeks[weeks.length - 1].length < 7) {
+    const week: Date[] = [];
+    for (let i = 0; i < 7; i++) {
+      week.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    weeks.push(week);
+
+    // Safety: stop if too many weeks (shouldn't happen) - but limit to 6 weeks
+    if (weeks.length > 6) break;
+  }
+
+  return weeks;
+}
+
+/**
  * Get CSS variable value from root
  */
 export function getCSSVarValue(varName: string): string {

@@ -7,6 +7,26 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Debug helper: show query string in the body for visibility
+      try {
+        const qs = typeof window !== 'undefined' ? window.location.search : '';
+        const el = document.createElement('div');
+        el.id = 'debug-querystring';
+        el.style.position = 'fixed';
+        el.style.right = '8px';
+        el.style.bottom = '8px';
+        el.style.background = 'rgba(0,0,0,0.6)';
+        el.style.color = 'white';
+        el.style.padding = '4px 8px';
+        el.style.zIndex = '9999';
+        el.style.fontSize = '12px';
+        el.textContent = qs;
+        document.body.appendChild(el);
+      } catch (e) {
+        // ignore
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

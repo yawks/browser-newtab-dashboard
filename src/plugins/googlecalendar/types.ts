@@ -1,4 +1,4 @@
-export type GoogleCalendarPeriod = '1-day' | '3-days' | '5-days' | 'week';
+export type GoogleCalendarPeriod = '1-day' | '3-days' | '5-days' | 'week' | 'month';
 export type GoogleCalendarAuthType = 'oauth' | 'ical';
 
 export interface GoogleCalendarConfig {
@@ -9,6 +9,8 @@ export interface GoogleCalendarConfig {
   icalUrl?: string; // For iCal public URL
   period: GoogleCalendarPeriod;
   userEmail?: string; // Current user's email for status detection
+  // Which day week starts on in month view ('sunday' or 'monday')
+  weekStart?: 'sunday' | 'monday';
 }
 
 export interface GoogleCalendar {

@@ -16,6 +16,7 @@ const PERIODS: { id: GoogleCalendarPeriod; label: string }[] = [
   { id: '3-days', label: '3 days' },
   { id: '5-days', label: '5 days' },
   { id: 'week', label: 'Week' },
+  { id: 'month', label: 'Month' },
 ];
 
 export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCalendarConfigModalProps) {
@@ -35,6 +36,7 @@ export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCal
   const [showPeriodPopover, setShowPeriodPopover] = useState(false);
   const [showAuthTypePopover, setShowAuthTypePopover] = useState(false);
   const [userEmail, setUserEmail] = useState<string>(config?.userEmail || '');
+  const [weekStart, setWeekStart] = useState<'monday' | 'sunday'>(config?.weekStart || 'monday');
 
   // Load calendars when authenticated (OAuth mode only)
   useEffect(() => {
@@ -148,6 +150,7 @@ export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCal
         selectedCalendarIds,
         period,
         userEmail: userEmail.trim() || undefined,
+        weekStart,
       };
 
       onSave(newConfig);
@@ -171,6 +174,7 @@ export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCal
         icalUrl: icalUrl.trim(),
         period,
         userEmail: userEmail.trim() || undefined,
+        weekStart,
       };
 
       onSave(newConfig);
@@ -443,6 +447,30 @@ export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCal
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-2 block">Week starts on</label>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="weekStart"
+                  checked={weekStart === 'monday'}
+                  onChange={() => setWeekStart('monday')}
+                />
+                <span className="text-sm">Monday</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="weekStart"
+                  checked={weekStart === 'sunday'}
+                  onChange={() => setWeekStart('sunday')}
+                />
+                <span className="text-sm">Sunday</span>
+              </label>
             </div>
           </div>
 

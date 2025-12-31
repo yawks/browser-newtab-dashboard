@@ -11,6 +11,7 @@ export function GoogleCalendarEditView({ config, onConfigChange, isEditing, onEx
     icalUrl: (config as unknown as GoogleCalendarConfig)?.icalUrl,
     period: (config as unknown as GoogleCalendarConfig)?.period || '1-day',
     userEmail: (config as unknown as GoogleCalendarConfig)?.userEmail,
+    weekStart: (config as unknown as GoogleCalendarConfig)?.weekStart || 'monday',
   };
 
   const [showModal, setShowModal] = useState(isEditing);

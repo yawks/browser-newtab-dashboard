@@ -1,6 +1,6 @@
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { GoogleCalendarConfig, GoogleCalendarEvent } from './types';
-import { formatDate, getDaysForPeriod } from './utils';
+import { getDaysForPeriod, getMonthGrid } from './utils';
 import { useAutoScroll, useCalendarEvents } from './hooks';
 import { useEffect, useRef, useState } from 'react';
 
@@ -10,7 +10,7 @@ import { PluginComponentProps } from '@/types/plugin';
 import { Timeline } from './Timeline';
 import { groupEventsByDay } from './api';
 
-export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
+export function GoogleCalendarDashboardView({ config, debugEvents }: PluginComponentProps & { debugEvents?: GoogleCalendarEvent[] }) {
   const googleCalendarConfig: GoogleCalendarConfig = {
     authType: (config as unknown as GoogleCalendarConfig)?.authType,
     accessToken: (config as unknown as GoogleCalendarConfig)?.accessToken,
@@ -18,9 +18,14 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     icalUrl: (config as unknown as GoogleCalendarConfig)?.icalUrl,
     period: (config as unknown as GoogleCalendarConfig)?.period || '1-day',
     userEmail: (config as unknown as GoogleCalendarConfig)?.userEmail,
+    weekStart: (config as unknown as GoogleCalendarConfig)?.weekStart || 'monday',
   };
 
-  const { events, isLoading, error } = useCalendarEvents(googleCalendarConfig);
+  // Allow injecting events for debugging (when `debugEvents` is supplied we skip fetching)
+  const hookResult = useCalendarEvents(googleCalendarConfig);
+  const events = debugEvents ?? hookResult.events;
+  const isLoading = debugEvents ? false : hookResult.isLoading;
+  const error = debugEvents ? null : hookResult.error;
   const [selectedEvent, setSelectedEvent] = useState<GoogleCalendarEvent | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -59,13 +64,13 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     }
 
     setSelectedEvent(event);
-    
+
     // Calculate popover position (using getBoundingClientRect for portal)
     const rect = buttonElement.getBoundingClientRect();
     const popoverWidth = 320; // w-80 = 320px
     const popoverMaxHeight = window.innerHeight * 0.8; // max-h-[80vh]
     const spacing = 8;
-    
+
     // Calculate horizontal position
     let left = rect.left;
     // If popover would overflow on the right, align to the right of the button
@@ -74,7 +79,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     }
     // Ensure it doesn't overflow on the left
     left = Math.max(10, left);
-    
+
     // Calculate vertical position
     let top = rect.bottom + spacing;
     // If popover would overflow at the bottom, position it above the button
@@ -85,7 +90,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
         top = Math.max(10, (window.innerHeight - popoverMaxHeight) / 2);
       }
     }
-    
+
     setPopoverPosition({
       top,
       left,
@@ -148,7 +153,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
   }
 
   const authType = googleCalendarConfig.authType || (googleCalendarConfig.accessToken ? 'oauth' : 'ical');
-  const isConfigured = authType === 'oauth' 
+  const isConfigured = authType === 'oauth'
     ? (googleCalendarConfig.accessToken && googleCalendarConfig.selectedCalendarIds && googleCalendarConfig.selectedCalendarIds.length > 0)
     : !!googleCalendarConfig.icalUrl;
 
@@ -168,11 +173,93 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
   return (
     <>
       <div ref={containerRef} className="h-full overflow-y-auto">
-        <div className="h-full p-4 box-border">
-          {/* Header with day labels for multi-day views */}
-          {googleCalendarConfig.period !== '1-day' && (
-            <div className="grid mb-4 gap-2" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
-              <div></div> {/* Spacer for timeline column */}
+        <div className="h-full p-2 box-border">
+          {/* Month view */}
+          {googleCalendarConfig.period === 'month' ? (() => {
+            const today = new Date();
+            const weeks = getMonthGrid(today, googleCalendarConfig.weekStart === 'monday');
+
+            // Build weekday labels according to week start
+            const weekdayLabels = (() => {
+              const labels: string[] = [];
+              for (let i = 0; i < 7; i++) {
+                const dayIndex = (googleCalendarConfig.weekStart === 'monday') ? ((i + 1) % 7) : i;
+                const d = new Date(2020, 0, 5 + dayIndex);
+                labels.push(d.toLocaleDateString(undefined, { weekday: 'short' }));
+              }
+              return labels;
+            })();
+
+            // Current Day check helpers
+            const currentYear = today.getFullYear();
+            const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
+            const currentDate = String(today.getDate()).padStart(2, '0');
+            const todayKey = `${currentYear}-${currentMonth}-${currentDate}`;
+
+            return (
+              <div className="w-full">
+                <div className="text-center mb-2 text-xl font-bold px-1">
+                  {today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                </div>
+                <div className="grid grid-cols-7 gap-2 mb-3 text-center">
+                  {weekdayLabels.map((label, idx) => (
+                    <div key={idx} className="text-sm font-semibold">{label}</div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-2">
+                  {weeks.flat().map((day) => {
+                    const year = day.getFullYear();
+                    const month = String(day.getMonth() + 1).padStart(2, '0');
+                    const date = String(day.getDate()).padStart(2, '0');
+                    const dayKey = `${year}-${month}-${date}`;
+                    const dayEvents = eventsByDay.get(dayKey) || [];
+                    const isCurrentMonth = day.getMonth() === today.getMonth();
+                    const isToday = dayKey === todayKey;
+
+                    return (
+                      <div key={dayKey} className={`min-h-[80px] border rounded p-2 bg-card ${isToday ? 'border-blue-500' : ''}  ${isCurrentMonth ? '' : 'opacity-50'}`}>
+                        <div className={`text-xs mb-2 ${isToday ? 'text-blue-500 font-bold' : 'text-muted-foreground'}`}>{date}</div>
+                        <div className="space-y-1">
+                          {dayEvents.map((event) => (
+                            <button
+                              key={event.id}
+                              className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent bg-muted"
+                              onClick={(e) => handleEventClick(event, e.currentTarget as HTMLButtonElement)}
+                              ref={(el) => {
+                                if (el) {
+                                  eventRefs.current.set(event.id, el as HTMLButtonElement);
+                                } else {
+                                  eventRefs.current.delete(event.id);
+                                }
+                              }}
+                            >
+                              {event.summary || 'No title'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })() : (
+            /* Timeline and Events grid */
+            <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
+              {/* Header Row */}
+              <div className="col-start-1" /> {/* Spacer for timeline */}
+              {days.map((day) => (
+                <div key={day.toISOString()} className="text-center font-semibold mb-2">
+                  <div className="text-sm text-muted-foreground">{day.toLocaleDateString(undefined, { weekday: 'short' })}</div>
+                  <div className="text-xl">{day.getDate()}</div>
+                </div>
+              ))}
+
+              {/* Timeline column */}
+              <Timeline hours={hours} />
+
+              {/* Day columns with events */}
               {days.map((day) => {
                 // Format date as YYYY-MM-DD in local timezone
                 const year = day.getFullYear();
@@ -180,47 +267,21 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
                 const date = String(day.getDate()).padStart(2, '0');
                 const dayKey = `${year}-${month}-${date}`;
                 const dayEvents = eventsByDay.get(dayKey) || [];
+
                 return (
-                  <div key={dayKey} className="text-center">
-                    <div className="text-sm font-semibold mb-1">
-                      {formatDate(dayKey)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {dayEvents.length} event{dayEvents.length !== 1 ? 's' : ''}
-                    </div>
-                  </div>
+                  <DayColumn
+                    key={dayKey}
+                    dayKey={dayKey}
+                    events={dayEvents}
+                    userEmail={googleCalendarConfig.userEmail}
+                    hours={hours}
+                    onEventClick={handleEventClick}
+                    eventRefs={eventRefs}
+                  />
                 );
               })}
             </div>
           )}
-
-          {/* Timeline and Events grid */}
-          <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
-            {/* Timeline column */}
-            <Timeline hours={hours} />
-
-            {/* Day columns with events */}
-            {days.map((day) => {
-              // Format date as YYYY-MM-DD in local timezone
-              const year = day.getFullYear();
-              const month = String(day.getMonth() + 1).padStart(2, '0');
-              const date = String(day.getDate()).padStart(2, '0');
-              const dayKey = `${year}-${month}-${date}`;
-              const dayEvents = eventsByDay.get(dayKey) || [];
-
-              return (
-                <DayColumn
-                  key={dayKey}
-                  dayKey={dayKey}
-                  events={dayEvents}
-                  userEmail={googleCalendarConfig.userEmail}
-                  hours={hours}
-                  onEventClick={handleEventClick}
-                  eventRefs={eventRefs}
-                />
-              );
-            })}
-          </div>
         </div>
       </div>
 

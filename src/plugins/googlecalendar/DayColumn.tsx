@@ -13,6 +13,10 @@ interface DayColumnProps {
 
 export function DayColumn({ dayKey, events, userEmail, hours, onEventClick, eventRefs }: DayColumnProps) {
   const eventLayout = calculateEventLayout(events);
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const isToday = dayKey === todayKey;
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   return (
     <div key={dayKey} className="relative min-w-0" style={{ height: `${24 * 60}px` }}>
@@ -29,11 +33,25 @@ export function DayColumn({ dayKey, events, userEmail, hours, onEventClick, even
           }}
         />
       ))}
-      
+
+      {/* Current time line */}
+      {isToday && (
+        <div
+          className="absolute border-t-2 border-red-500 z-10"
+          style={{
+            top: `${currentMinutes}px`,
+            left: 0,
+            right: 0,
+          }}
+        >
+          <div className="absolute -left-1.5 -top-1.5 w-3 h-3 bg-red-500 rounded-full" />
+        </div>
+      )}
+
       {/* Events positioned by time */}
       {events.map((event) => {
         const layout = eventLayout.get(event.id) || { left: 0, width: 100 };
-        
+
         return (
           <EventCard
             key={event.id}
