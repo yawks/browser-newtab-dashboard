@@ -1,10 +1,14 @@
-import { AlertCircle, Calendar, CheckCircle2, Circle, Clock, HelpCircle, Link as LinkIcon, Loader2, MapPin, Users, X, XCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { GoogleCalendarConfig, GoogleCalendarEvent } from './types';
-import { fetchGoogleCalendarEvents, groupEventsByDay } from './api';
+import { formatDate, getDaysForPeriod } from './utils';
+import { useAutoScroll, useCalendarEvents } from './hooks';
 import { useEffect, useRef, useState } from 'react';
 
+import { DayColumn } from './DayColumn';
+import { EventPopover } from './EventPopover';
 import { PluginComponentProps } from '@/types/plugin';
-import { createPortal } from 'react-dom';
+import { Timeline } from './Timeline';
+import { groupEventsByDay } from './api';
 
 export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
   const googleCalendarConfig: GoogleCalendarConfig = {
@@ -16,10 +20,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     userEmail: (config as unknown as GoogleCalendarConfig)?.userEmail,
   };
 
-
-  const [events, setEvents] = useState<GoogleCalendarEvent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { events, isLoading, error } = useCalendarEvents(googleCalendarConfig);
   const [selectedEvent, setSelectedEvent] = useState<GoogleCalendarEvent | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -27,59 +28,8 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const loadEvents = async () => {
-      const authType = googleCalendarConfig.authType || (googleCalendarConfig.accessToken ? 'oauth' : 'ical');
-      
-      // Validate configuration based on auth type
-      if (authType === 'oauth') {
-        if (!googleCalendarConfig.accessToken || !googleCalendarConfig.selectedCalendarIds || googleCalendarConfig.selectedCalendarIds.length === 0) {
-          setError('Please configure the Google Calendar widget.');
-          setIsLoading(false);
-          return;
-        }
-      } else {
-        if (!googleCalendarConfig.icalUrl) {
-          setError('Please configure the iCal URL.');
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const fetchedEvents = await fetchGoogleCalendarEvents(googleCalendarConfig);
-        setEvents(fetchedEvents);
-        setError(null);
-      } catch (err) {
-        console.error('Failed to fetch calendar events:', err);
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load events.';
-        
-        // If authentication expired, show a helpful message
-        if (errorMessage.includes('Authentication expired') || errorMessage.includes('401')) {
-          setError('Authentication expired. Please reconnect to Google Calendar in the settings.');
-        } else {
-          setError(errorMessage);
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadEvents();
-
-    // Refresh every 5 minutes
-    const interval = setInterval(loadEvents, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [
-    googleCalendarConfig.authType,
-    googleCalendarConfig.accessToken,
-    googleCalendarConfig.selectedCalendarIds?.join(',') || '',
-    googleCalendarConfig.icalUrl,
-    googleCalendarConfig.period,
-  ]);
+  // Use auto-scroll hook
+  useAutoScroll(isLoading, containerRef);
 
   // Close popover when clicking outside
   useEffect(() => {
@@ -142,7 +92,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     });
   };
 
-  const formatTime = (dateTime?: string, date?: string): string => {
+  
     if (dateTime) {
       const d = new Date(dateTime);
       return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -488,8 +438,9 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
     );
   }
 
-  const days = getDaysForPeriod();
+  const days = getDaysForPeriod(googleCalendarConfig.period);
   const eventsByDay = groupEventsByDay(events);
+  const hours = Array.from({ length: 24 }, (_, i) => i);
 
   return (
     <>
@@ -523,21 +474,7 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
           {/* Timeline and Events grid */}
           <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
             {/* Timeline column */}
-            <div ref={timelineRef} className="relative" style={{ height: `${24 * 60}px` }}>
-              {hours.map((hour) => (
-                <div
-                  key={hour}
-                  className="absolute text-xs text-muted-foreground pr-2 text-right"
-                  style={{
-                    top: `${hour * 60}px`,
-                    height: '60px',
-                    width: '60px',
-                  }}
-                >
-                  {hour.toString().padStart(2, '0')}:00
-                </div>
-              ))}
-            </div>
+            <Timeline hours={hours} />
 
             {/* Day columns with events */}
             {days.map((day) => {
@@ -547,341 +484,36 @@ export function GoogleCalendarDashboardView({ config }: PluginComponentProps) {
               const date = String(day.getDate()).padStart(2, '0');
               const dayKey = `${year}-${month}-${date}`;
               const dayEvents = eventsByDay.get(dayKey) || [];
-              const eventLayout = calculateEventLayout(dayEvents);
 
               return (
-                <div key={dayKey} className="relative min-w-0" style={{ height: `${24 * 60}px` }}>
-                  {/* Hour lines */}
-                  {hours.map((hour) => (
-                    <div
-                      key={hour}
-                      className="absolute border-t border-border/30"
-                      style={{
-                        top: `${hour * 60}px`,
-                        left: 0,
-                        right: 0,
-                        height: '1px',
-                      }}
-                    />
-                  ))}
-                  
-                  {/* Events positioned by time */}
-                  {dayEvents.map((event) => {
-                    const isPast = isEventPast(event);
-                    const isOngoing = isEventOngoing(event);
-                    const isCancelled = event.status === 'CANCELLED';
-                    const userResponseStatus = getUserResponseStatus(event);
-                    const position = getEventPosition(event);
-                    const layout = eventLayout.get(event.id) || { left: 0, width: 100 };
-                    
-                    // Determine background style based on user response and ongoing status
-                    let textClass = '';
-                    let textStyle: React.CSSProperties = {};
-                    let backgroundStyle: React.CSSProperties = {};
-                    
-                    // Get CSS variable values for background colors
-                    const getCSSVarValue = (varName: string): string => {
-                      if (typeof window !== 'undefined' && document.documentElement) {
-                        const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-                        return value || '';
-                      }
-                      return '';
-                    };
-                    
-                    // Check if dark mode
-                    const isDark = typeof window !== 'undefined' && document.documentElement.classList.contains('dark');
-                    
-                    // Priority: ongoing events get blue color, then user response status
-                    if (isOngoing) {
-                      // Blue color for ongoing events - adapt to light/dark mode
-                      // Light mode: blue-500 (hsl(217, 91%, 60%))
-                      // Dark mode: blue-400 (hsl(217, 91%, 70%))
-                      const blueColor = isDark 
-                        ? 'hsl(217, 91%, 70%)' // Lighter blue for dark mode
-                        : 'hsl(217, 91%, 60%)'; // Darker blue for light mode
-                      backgroundStyle = { 
-                        backgroundColor: blueColor,
-                      };
-                      // Use dark text on light blue background (dark mode) or light text on dark blue (light mode)
-                      textStyle = {
-                        color: isDark ? 'hsl(0, 0%, 10%)' : 'hsl(0, 0%, 100%)', // Dark text in dark mode, white text in light mode
-                      };
-                    } else if (userResponseStatus === 'ACCEPTED') {
-                      // Use accent color for accepted events to make them stand out
-                      const accentColor = getCSSVarValue('--accent') || '210 40% 96.1%';
-                      backgroundStyle = { 
-                        backgroundColor: `hsl(${accentColor})`,
-                      };
-                    } else if (userResponseStatus === 'DECLINED') {
-                      // Use muted color with transparency for declined events
-                      const mutedColor = getCSSVarValue('--muted') || '210 40% 96.1%';
-                      backgroundStyle = { 
-                        backgroundColor: `hsl(${mutedColor} / 0.3)`,
-                      };
-                      textClass = 'line-through'; // Strikethrough text
-                    } else if (userResponseStatus === 'TENTATIVE') {
-                      // Use card color with a more visible hatch pattern for tentative events
-                      const cardColor = getCSSVarValue('--card') || '0 0% 100%';
-                      // Use a more visible pattern - check if dark mode
-                      const hatchColor = isDark 
-                        ? 'rgba(255, 255, 255, 0.2)' // White lines in dark mode
-                        : 'rgba(0, 0, 0, 0.25)'; // Dark lines in light mode
-                      backgroundStyle = {
-                        backgroundColor: `hsl(${cardColor})`,
-                        backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 4px, ${hatchColor} 4px, ${hatchColor} 8px)`,
-                        backgroundSize: '12px 12px',
-                      };
-                    } else {
-                      // Default or NEEDS-ACTION - use card color
-                      if (isPast) {
-                        const mutedColor = getCSSVarValue('--muted') || '210 40% 96.1%';
-                        backgroundStyle = { 
-                          backgroundColor: `hsl(${mutedColor} / 0.5)`,
-                        };
-                      } else {
-                        const cardColor = getCSSVarValue('--card') || '0 0% 100%';
-                        backgroundStyle = { 
-                          backgroundColor: `hsl(${cardColor})`,
-                        };
-                      }
-                    }
-                    
-                    // Handle all-day events
-                    if (!position) {
-                      return (
-                        <button
-                          key={event.id}
-                          ref={(el) => {
-                            if (el) {
-                              eventRefs.current.set(event.id, el);
-                              // Apply styles with !important to override any CSS
-                              if (backgroundStyle.backgroundColor) {
-                                el.style.setProperty('background-color', String(backgroundStyle.backgroundColor), 'important');
-                              }
-                              if (backgroundStyle.backgroundImage) {
-                                el.style.setProperty('background-image', String(backgroundStyle.backgroundImage), 'important');
-                              }
-                              if (backgroundStyle.backgroundSize) {
-                                el.style.setProperty('background-size', String(backgroundStyle.backgroundSize), 'important');
-                              }
-                              if (textStyle.color) {
-                                el.style.setProperty('color', String(textStyle.color), 'important');
-                              }
-                            } else {
-                              eventRefs.current.delete(event.id);
-                            }
-                          }}
-                          onClick={(e) => handleEventClick(event, e.currentTarget)}
-                          className={`absolute top-0 left-0 right-0 text-left p-2 rounded-md border border-border transition-colors ${
-                            isPast
-                              ? 'text-muted-foreground opacity-60'
-                              : ''
-                          } ${textClass} ${isCancelled ? 'line-through opacity-50' : ''}`}
-                          style={{
-                            backgroundColor: backgroundStyle.backgroundColor,
-                            backgroundImage: backgroundStyle.backgroundImage,
-                            backgroundSize: backgroundStyle.backgroundSize,
-                            color: textStyle.color,
-                          }}
-                        >
-                          <div className="text-sm font-medium truncate" style={{ color: textStyle.color || 'inherit' }}>{event.summary || 'No title'}</div>
-                          <div className="text-xs" style={{ color: textStyle.color ? (isDark ? 'hsl(0, 0%, 25%)' : 'hsl(0, 0%, 85%)') : undefined }}>All day</div>
-                        </button>
-                      );
-                    }
-
-                    return (
-                      <button
-                        key={event.id}
-                        ref={(el) => {
-                          if (el) {
-                            eventRefs.current.set(event.id, el);
-                            // Apply styles with !important to override any CSS
-                            if (backgroundStyle.backgroundColor) {
-                              el.style.setProperty('background-color', String(backgroundStyle.backgroundColor), 'important');
-                            }
-                            if (backgroundStyle.backgroundImage) {
-                              el.style.setProperty('background-image', String(backgroundStyle.backgroundImage), 'important');
-                            }
-                            if (backgroundStyle.backgroundSize) {
-                              el.style.setProperty('background-size', String(backgroundStyle.backgroundSize), 'important');
-                            }
-                            if (textStyle.color) {
-                              el.style.setProperty('color', String(textStyle.color), 'important');
-                            }
-                          } else {
-                            eventRefs.current.delete(event.id);
-                          }
-                        }}
-                        onClick={(e) => handleEventClick(event, e.currentTarget)}
-                        className={`absolute text-left p-1.5 rounded border border-border transition-colors overflow-hidden ${
-                          isPast
-                            ? 'text-muted-foreground opacity-60'
-                            : ''
-                        } ${textClass} ${isCancelled ? 'line-through opacity-50' : ''}`}
-                        style={{
-                          top: `${position.top}px`,
-                          height: `${position.height}px`,
-                          minHeight: '30px',
-                          left: `${layout.left}%`,
-                          width: `${layout.width}%`,
-                          // Also apply in style prop as fallback
-                          backgroundColor: backgroundStyle.backgroundColor,
-                          backgroundImage: backgroundStyle.backgroundImage,
-                          backgroundSize: backgroundStyle.backgroundSize,
-                          color: textStyle.color,
-                        }}
-                      >
-                        <div className="text-xs font-medium truncate" style={{ color: textStyle.color || 'inherit' }}>{event.summary || 'No title'}</div>
-                        <div className="text-[10px] mt-0.5" style={{ color: textStyle.color ? (isDark ? 'hsl(0, 0%, 25%)' : 'hsl(0, 0%, 85%)') : undefined }}>
-                          {formatTime(event.start.dateTime, event.start.date)}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                <DayColumn
+                  key={dayKey}
+                  dayKey={dayKey}
+                  events={dayEvents}
+                  userEmail={googleCalendarConfig.userEmail}
+                  hours={hours}
+                  onEventClick={handleEventClick}
+                  eventRefs={eventRefs}
+                />
+              );
               );
             })}
           </div>
         </div>
       </div>
 
-      {/* Event details popover - using portal to escape overflow container */}
-      {selectedEvent && popoverPosition && typeof document !== 'undefined' && createPortal(
-        <div
-          ref={popoverRef}
-          className="fixed z-[9999] w-80 max-w-[90vw] rounded-lg border border-border bg-card shadow-xl p-4 space-y-3 max-h-[80vh] overflow-y-auto"
-          style={{
-            top: `${Math.max(10, Math.min(popoverPosition.top, window.innerHeight - 20))}px`,
-            left: `${popoverPosition.left}px`,
-            maxHeight: `${Math.min(window.innerHeight - popoverPosition.top - 20, window.innerHeight * 0.8)}px`,
+      {/* Event details popover */}
+      {selectedEvent && popoverPosition && (
+        <EventPopover
+          event={selectedEvent}
+          position={popoverPosition}
+          onClose={() => {
+            setSelectedEvent(null);
+            setPopoverPosition(null);
           }}
-        >
-          <div className="flex items-start justify-between">
-            <h3 className="text-lg font-semibold pr-4">{selectedEvent.summary || 'No title'}</h3>
-            <button
-              onClick={() => {
-                setSelectedEvent(null);
-                setPopoverPosition(null);
-              }}
-              className="text-muted-foreground hover:text-foreground flex-shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Time */}
-          <div className="flex items-start gap-2 text-sm">
-            <Clock className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-            <div>
-              <div className="font-medium">
-                {formatTime(selectedEvent.start.dateTime, selectedEvent.start.date)}
-              </div>
-              {selectedEvent.end && (
-                <div className="text-muted-foreground text-xs">
-                  until {formatTime(selectedEvent.end.dateTime, selectedEvent.end.date)}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Location */}
-          {selectedEvent.location && (
-            <div className="flex items-start gap-2 text-sm">
-              <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div className="text-muted-foreground">{selectedEvent.location}</div>
-            </div>
-          )}
-
-          {/* Description */}
-          {selectedEvent.description && (
-            <div 
-              className="text-sm text-muted-foreground"
-              dangerouslySetInnerHTML={{ 
-                __html: selectedEvent.description
-                  .replace(/\\n/g, '\n')
-                  .replace(/\n/g, '<br/>')
-              }}
-            />
-          )}
-
-          {/* Separator before participants */}
-          {(selectedEvent.organizer || (selectedEvent.attendees && selectedEvent.attendees.length > 0)) && (
-            <div className="border-t border-border pt-3 mt-3">
-              {/* Organizer */}
-              {selectedEvent.organizer && (
-                <div className="flex items-center gap-2 text-sm mb-2">
-                  <Calendar className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-xs text-muted-foreground mb-0.5">Organizer</div>
-                    <div className="font-medium">
-                      {selectedEvent.organizer.displayName || selectedEvent.organizer.email}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Attendees */}
-              {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                    <Users className="w-4 h-4 flex-shrink-0" />
-                    <span>Attendees ({selectedEvent.attendees.length})</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {selectedEvent.attendees.map((attendee, idx) => {
-                      const statusInfo = getStatusIcon(attendee.responseStatus);
-                      const StatusIcon = statusInfo.icon;
-                      const isOrganizer = selectedEvent.organizer?.email === attendee.email;
-                      
-                      return (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 text-sm"
-                        >
-                          <div title={statusInfo.label} className="flex-shrink-0">
-                            <StatusIcon
-                              className={`w-4 h-4 ${statusInfo.color}`}
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className={`truncate ${isOrganizer ? 'font-medium text-blue-600' : ''}`}>
-                              {attendee.displayName || attendee.email}
-                              {isOrganizer && (
-                                <span className="text-xs text-muted-foreground ml-1">(Organizer)</span>
-                              )}
-                            </div>
-                            {attendee.email && attendee.displayName && (
-                              <div className="text-xs text-muted-foreground truncate">
-                                {attendee.email}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Link to Google Calendar */}
-          {selectedEvent.htmlLink && (
-            <a
-              href={selectedEvent.htmlLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-            >
-              <LinkIcon className="w-4 h-4" />
-              <span>Open in Google Calendar</span>
-            </a>
-          )}
-        </div>,
-        document.body
+          popoverRef={popoverRef}
+        />
       )}
     </>
   );
 }
-
