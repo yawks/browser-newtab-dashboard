@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { GoogleCalendarConfig, GoogleCalendarEvent } from './types';
 import { getDaysForPeriod, getMonthGrid } from './utils';
 import { useAutoScroll, useCalendarEvents } from './hooks';
@@ -29,6 +29,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
   const refresh = debugEvents ? () => { } : hookResult.refresh;
   const [selectedEvent, setSelectedEvent] = useState<GoogleCalendarEvent | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
+  const [currentDate, setCurrentDate] = useState(new Date());
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const eventRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -98,14 +99,66 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
     });
   };
 
+  // Navigation limits
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
+  let canGoPrev = true;
+  let canGoNext = true;
 
-  // Convert URLs in text to clickable links and \n to <br/>
+  if (googleCalendarConfig.period === 'month') {
+    // limit 3 months
+    const minDate = new Date(today);
+    minDate.setMonth(minDate.getMonth() - 3);
+    minDate.setDate(1);
 
+    const maxDate = new Date(today);
+    maxDate.setMonth(maxDate.getMonth() + 3);
+    maxDate.setDate(1);
 
-  // Calculate event position and height based on time
+    const currentMonth = new Date(currentDate);
+    currentMonth.setDate(1);
+    currentMonth.setHours(0, 0, 0, 0);
 
+    canGoPrev = currentMonth.getTime() > minDate.getTime();
+    canGoNext = currentMonth.getTime() < maxDate.getTime();
+  } else {
+    // limit 14 days
+    const minDate = new Date(today);
+    minDate.setDate(minDate.getDate() - 14);
 
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 14);
+
+    const currentDay = new Date(currentDate);
+    currentDay.setHours(0, 0, 0, 0);
+
+    canGoPrev = currentDay.getTime() > minDate.getTime();
+    canGoNext = currentDay.getTime() < maxDate.getTime();
+  }
+
+  // Navigation handlers
+  const handlePrev = () => {
+    if (!canGoPrev) return;
+    const newDate = new Date(currentDate);
+    if (googleCalendarConfig.period === 'month') {
+      newDate.setMonth(newDate.getMonth() - 1);
+    } else {
+      newDate.setDate(newDate.getDate() - 1);
+    }
+    setCurrentDate(newDate);
+  };
+
+  const handleNext = () => {
+    if (!canGoNext) return;
+    const newDate = new Date(currentDate);
+    if (googleCalendarConfig.period === 'month') {
+      newDate.setMonth(newDate.getMonth() + 1);
+    } else {
+      newDate.setDate(newDate.getDate() + 1);
+    }
+    setCurrentDate(newDate);
+  };
 
 
   // Auto-scroll to current time after events are loaded
@@ -114,7 +167,13 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
 
     const scrollToCurrentTime = () => {
       if (!containerRef.current) return;
+
+      // Only scroll if we are looking at TODAY (approx check)
       const now = new Date();
+      if (currentDate.getDate() !== now.getDate() || currentDate.getMonth() !== now.getMonth()) {
+        return;
+      }
+
       const currentHour = now.getHours() + now.getMinutes() / 60;
       const hourHeight = 60; // Each hour = 60px
       const marginTop = 30; // Keep a small margin from the top
@@ -139,7 +198,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
       clearTimeout(timeoutId);
       clearTimeout(timeoutId2);
     };
-  }, [isLoading, events.length, googleCalendarConfig.period]);
+  }, [isLoading, events.length, googleCalendarConfig.period, currentDate]);
 
 
 
@@ -167,7 +226,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
     );
   }
 
-  const days = getDaysForPeriod(googleCalendarConfig.period);
+  const days = getDaysForPeriod(googleCalendarConfig.period, currentDate);
   const eventsByDay = groupEventsByDay(events);
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -177,8 +236,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
         <div className="h-full p-2 box-border">
           {/* Month view */}
           {googleCalendarConfig.period === 'month' ? (() => {
-            const today = new Date();
-            const weeks = getMonthGrid(today, googleCalendarConfig.weekStart === 'monday');
+            const weeks = getMonthGrid(currentDate, googleCalendarConfig.weekStart === 'monday');
 
             // Build weekday labels according to week start
             const weekdayLabels = (() => {
@@ -192,15 +250,25 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
             })();
 
             // Current Day check helpers
+            const today = new Date();
             const currentYear = today.getFullYear();
             const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
-            const currentDate = String(today.getDate()).padStart(2, '0');
-            const todayKey = `${currentYear}-${currentMonth}-${currentDate}`;
+            const currentDateStr = String(today.getDate()).padStart(2, '0');
+            const todayKey = `${currentYear}-${currentMonth}-${currentDateStr}`;
 
             return (
               <div className="w-full">
                 <div className="text-center mb-2 text-xl font-bold px-1 flex items-center justify-center gap-2">
-                  {today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                  {canGoPrev ? (
+                    <button onClick={handlePrev} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+                  ) : <div className="w-6 h-6" />}
+
+                  {currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+
+                  {canGoNext ? (
+                    <button onClick={handleNext} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronRight className="w-4 h-4" /></button>
+                  ) : <div className="w-6 h-6" />}
+
                   <button
                     onClick={() => refresh()}
                     disabled={isLoading}
@@ -223,7 +291,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
                     const date = String(day.getDate()).padStart(2, '0');
                     const dayKey = `${year}-${month}-${date}`;
                     const dayEvents = eventsByDay.get(dayKey) || [];
-                    const isCurrentMonth = day.getMonth() === today.getMonth();
+                    const isCurrentMonth = day.getMonth() === currentDate.getMonth();
                     const isToday = dayKey === todayKey;
 
                     return (
@@ -257,7 +325,10 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
             /* Timeline and Events grid */
             <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
               {/* Header Row */}
-              <div className="col-start-1 flex items-center justify-center">
+              <div className="col-start-1 flex items-center justify-center gap-1">
+                {canGoPrev ? (
+                  <button onClick={handlePrev} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+                ) : <div className="w-6 h-6" />}
                 <button
                   onClick={() => refresh()}
                   disabled={isLoading}
@@ -266,6 +337,9 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
                 >
                   <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
+                {canGoNext ? (
+                  <button onClick={handleNext} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronRight className="w-4 h-4" /></button>
+                ) : <div className="w-6 h-6" />}
               </div> {/* Spacer for timeline */}
               {days.map((day) => (
                 <div key={day.toISOString()} className="text-center font-semibold mb-2">

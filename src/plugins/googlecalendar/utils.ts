@@ -272,9 +272,9 @@ export function findCurrentEvent(events: GoogleCalendarEvent[]): GoogleCalendarE
 /**
  * Get days for the specified period
  */
-export function getDaysForPeriod(period: string): Date[] {
+export function getDaysForPeriod(period: string, startDate?: Date): Date[] {
   const days: Date[] = [];
-  const now = new Date();
+  const now = startDate ? new Date(startDate) : new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   let count = 1;

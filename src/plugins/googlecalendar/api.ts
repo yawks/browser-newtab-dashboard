@@ -219,12 +219,7 @@ function parseICal(icalText: string): GoogleCalendarEvent[] {
   }
 }
 
-// Format a date into a timezone-aware key: YYYYMMDDTHHMM (wall time)
-function formatDateKey(dateInput: string | Date, _tzid?: string): string {
-    // Only used for deduplication map now, kept simple
-     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-     return date.toISOString();
-}
+
 
 // Cache configuration
 const ICAL_CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
@@ -430,26 +425,7 @@ async function refreshICalCache(icalUrl: string): Promise<void> {
 
 // Parse iCal datetime format (YYYYMMDDTHHmmss or YYYYMMDDTHHmmssZ)
 // If tzid is provided, treat as local time in that timezone; otherwise treat as UTC if Z suffix
-function parseICalDateTime(value: string, tzid?: string): Date {
-  const isUTC = value.endsWith('Z');
-  const cleanValue = value.replace(/Z$/, '');
-  
-  // Format: YYYYMMDDTHHmmss
-  const year = parseInt(cleanValue.substring(0, 4), 10);
-  const month = parseInt(cleanValue.substring(4, 6), 10) - 1; // Month is 0-indexed
-  const day = parseInt(cleanValue.substring(6, 8), 10);
-  const hour = cleanValue.length > 9 ? parseInt(cleanValue.substring(9, 11), 10) : 0;
-  const minute = cleanValue.length > 11 ? parseInt(cleanValue.substring(11, 13), 10) : 0;
-  const second = cleanValue.length > 13 ? parseInt(cleanValue.substring(13, 15), 10) : 0;
-  
-  if (isUTC || !tzid) {
-    // If Z suffix or no timezone, treat as UTC
-    return new Date(Date.UTC(year, month, day, hour, minute, second));
-  } else {
-    // If timezone is specified, create date in local timezone
-    return new Date(year, month, day, hour, minute, second);
-  }
-}
+
 
 // Fetch events from iCal URL (background refresh if using stale cache)
 async function fetchICalEvents(icalUrl: string, period: string, forceRefresh: boolean = false): Promise<GoogleCalendarEvent[]> {
@@ -567,73 +543,9 @@ async function fetchICalEvents(icalUrl: string, period: string, forceRefresh: bo
     let allEvents = parseICal(icalText);
     log('Parsed events count:', allEvents.length);
 
-    // Deduplicate events: if there's a RECURRENCE-ID event, remove the corresponding generated occurrence
-    // Events with RECURRENCE-ID have IDs like "uid-recurrence-20251215T140000"
-    // Generated occurrences have IDs like "uid-0", "uid-1", etc.
-    // We match on base UID + original occurrence start (wall time in the proper TZ) to avoid duplicates when an instance is rescheduled.
-    const recurrenceIdMap = new Map<string, GoogleCalendarEvent>();
-    const regularEvents: GoogleCalendarEvent[] = [];
-    const buildOccurrenceKey = (baseUid: string, dateValue: Date | string, tzid?: string): string =>
-      `${baseUid}-${formatDateKey(dateValue, tzid || 'Europe/Paris')}`; // Default to Europe/Paris for consistency
-    
-    for (const event of allEvents) {
-      if (event.id.includes('-recurrence-')) {
-        // Extract the base UID from the ID
-        const match = event.id.match(/^(.+)-recurrence-(.+)$/);
-        if (match) {
-          const baseUid = match[1];
-          // Prefer the RECURRENCE-ID value (original occurrence start) if present
-          const recurrenceIdValue = event.id.split('-recurrence-')[1];
-          let occurrenceDate: Date | null = null;
+    // Deduplication is handled inside parseICal now, preventing duplicate events 
+    // when a recurring instance is modified (exception).
 
-          if (recurrenceIdValue) {
-            // If we stored tzid during parsing, try to parse with it
-            const tzid = (event as any).recurrenceIdTzid as string | undefined;
-            try {
-              occurrenceDate = parseICalDateTime(recurrenceIdValue, tzid);
-            } catch {
-              occurrenceDate = null;
-            }
-          }
-
-          // Fallback to the event's own start date
-          if (!occurrenceDate && event.start.dateTime) {
-            occurrenceDate = new Date(event.start.dateTime);
-          }
-
-          if (occurrenceDate) {
-            const tz = (event.start as any)?.timeZone || (event as any).recurrenceIdTzid;
-            const key = buildOccurrenceKey(baseUid, occurrenceDate, tz);
-            recurrenceIdMap.set(key, event);
-          }
-        }
-      } else {
-        regularEvents.push(event);
-      }
-    }
-    
-    // Filter out generated occurrences that have a corresponding RECURRENCE-ID event
-    const deduplicatedEvents = regularEvents.filter((event) => {
-      // Check if this event's date matches a RECURRENCE-ID event
-      if (event.start.dateTime) {
-        const eventDate = new Date(event.start.dateTime);
-        // Extract base UID (everything before the last dash and number)
-        const uidMatch = event.id.match(/^(.+?)-(\d+)$/);
-        if (uidMatch) {
-          const baseUid = uidMatch[1];
-          const tz = (event.start as any)?.timeZone || 'Europe/Paris'; // Use same tz as RECURRENCE-ID
-          const key = buildOccurrenceKey(baseUid, eventDate, tz);
-          if (recurrenceIdMap.has(key)) {
-            // This occurrence is replaced by a RECURRENCE-ID event, exclude it
-            return false;
-          }
-        }
-      }
-      return true;
-    });
-    
-    // Add back the RECURRENCE-ID events
-    allEvents = [...deduplicatedEvents, ...Array.from(recurrenceIdMap.values())];
     
     // Filter to keep only future events and today's events for cache (to save storage space)
     const now = new Date();
@@ -944,55 +856,32 @@ function getDateRange(period: string): { timeMin: string; timeMax: string } {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   
-  let days = 1;
-  switch (period) {
-    case '1-day':
-      days = 1;
-      break;
-    case '3-days':
-      days = 3;
-      break;
-    case '5-days':
-      days = 5;
-      break;
-    case 'week':
-      days = 7;
-      break;
-    case 'month':
-      // For month view, we need a special calculation
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      
-      // Add buffer (1 week before and after) to cover grid overlaps
-      const timeMin = new Date(firstDayOfMonth);
-      timeMin.setDate(timeMin.getDate() - 7);
-      timeMin.setHours(0, 0, 0, 0);
-      
-      const timeMax = new Date(lastDayOfMonth);
-      timeMax.setDate(timeMax.getDate() + 7);
-      timeMax.setHours(23, 59, 59, 999);
-      
-      return {
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-      };
-    default:
-      days = 1;
+  const minDate = new Date(today);
+  const maxDate = new Date(today);
+
+  if (period === 'month') {
+    // For month view, keep +/- 3 months relative to today
+    minDate.setMonth(minDate.getMonth() - 3);
+    minDate.setDate(1);
+    minDate.setHours(0, 0, 0, 0);
+    
+    // To assume we can see M+3, we need to cover the end of that month.
+    // maxDate is currently M. M+3. Then go to end of it.
+    maxDate.setMonth(maxDate.getMonth() + 4); // +4 to get to start of M+4
+    maxDate.setDate(0); // Go back one day to end of M+3
+    maxDate.setHours(23, 59, 59, 999);
+  } else {
+    // For other views (timeline), keep +/- 14 days relative to today
+    minDate.setDate(minDate.getDate() - 14);
+    minDate.setHours(0, 0, 0, 0);
+    
+    maxDate.setDate(maxDate.getDate() + 14);
+    maxDate.setHours(23, 59, 59, 999);
   }
 
-  const timeMin = new Date(today);
-  timeMin.setHours(0, 0, 0, 0);
-  
-  const timeMax = new Date(today);
-  // For 1-day, we want today only (days - 1 = 0 days added)
-  // For 3-days, we want today + 2 more days (days - 1 = 2 days added)
-  // etc.
-  timeMax.setDate(timeMax.getDate() + days - 1);
-  timeMax.setHours(23, 59, 59, 999);
-
   return {
-    timeMin: timeMin.toISOString(),
-    timeMax: timeMax.toISOString(),
+    timeMin: minDate.toISOString(),
+    timeMax: maxDate.toISOString(),
   };
 }
 
