@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { GoogleCalendarConfig, GoogleCalendarEvent } from './types';
 import { getDaysForPeriod, getMonthGrid } from './utils';
 import { useAutoScroll, useCalendarEvents } from './hooks';
@@ -26,6 +26,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
   const events = debugEvents ?? hookResult.events;
   const isLoading = debugEvents ? false : hookResult.isLoading;
   const error = debugEvents ? null : hookResult.error;
+  const refresh = debugEvents ? () => { } : hookResult.refresh;
   const [selectedEvent, setSelectedEvent] = useState<GoogleCalendarEvent | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -198,8 +199,16 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
 
             return (
               <div className="w-full">
-                <div className="text-center mb-2 text-xl font-bold px-1">
+                <div className="text-center mb-2 text-xl font-bold px-1 flex items-center justify-center gap-2">
                   {today.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                  <button
+                    onClick={() => refresh()}
+                    disabled={isLoading}
+                    className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"
+                    title="Refresh events"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                  </button>
                 </div>
                 <div className="grid grid-cols-7 gap-2 mb-3 text-center">
                   {weekdayLabels.map((label, idx) => (
@@ -248,7 +257,16 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
             /* Timeline and Events grid */
             <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
               {/* Header Row */}
-              <div className="col-start-1" /> {/* Spacer for timeline */}
+              <div className="col-start-1 flex items-center justify-center">
+                <button
+                  onClick={() => refresh()}
+                  disabled={isLoading}
+                  className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"
+                  title="Refresh events"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div> {/* Spacer for timeline */}
               {days.map((day) => (
                 <div key={day.toISOString()} className="text-center font-semibold mb-2">
                   <div className="text-sm text-muted-foreground">{day.toLocaleDateString(undefined, { weekday: 'short' })}</div>

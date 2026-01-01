@@ -12,7 +12,7 @@ export function useCalendarEvents(config: GoogleCalendarConfig) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadEvents = async () => {
+    const loadEvents = async (forceRefresh: boolean = false) => {
       const authType = config.authType || (config.accessToken ? 'oauth' : 'ical');
       
       // Validate configuration based on auth type
@@ -34,7 +34,7 @@ export function useCalendarEvents(config: GoogleCalendarConfig) {
       setError(null);
 
       try {
-        const fetchedEvents = await fetchGoogleCalendarEvents(config);
+        const fetchedEvents = await fetchGoogleCalendarEvents(config, forceRefresh);
         setEvents(fetchedEvents);
         setError(null);
       } catch (err) {
@@ -55,7 +55,7 @@ export function useCalendarEvents(config: GoogleCalendarConfig) {
     loadEvents();
 
     // Refresh every 5 minutes
-    const interval = setInterval(loadEvents, 5 * 60 * 1000);
+    const interval = setInterval(() => loadEvents(false), 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [
     config.authType,
@@ -65,7 +65,22 @@ export function useCalendarEvents(config: GoogleCalendarConfig) {
     config.period,
   ]);
 
-  return { events, isLoading, error };
+  const refresh = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedEvents = await fetchGoogleCalendarEvents(config, true);
+      setEvents(fetchedEvents);
+    } catch (err) {
+      console.error('Failed to refresh calendar events:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh events.';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { events, isLoading, error, refresh };
 }
 
 /**

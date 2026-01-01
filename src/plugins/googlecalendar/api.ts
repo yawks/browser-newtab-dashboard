@@ -1,474 +1,229 @@
 import { GoogleCalendar, GoogleCalendarConfig, GoogleCalendarEvent, GoogleCalendarEventsResponse } from './types';
 
-// Interface for storing recurrence information during parsing
-interface RecurrenceInfo {
-  rrule?: string;
-  exdate?: string[];
-  status?: string;
-  recurrenceId?: string; // RECURRENCE-ID for modified instances
-  recurrenceIdTzid?: string; // Timezone for RECURRENCE-ID if provided
-}
+// @ts-ignore
+import ICAL from 'ical.js';
 
-// Decode iCal escape sequences: \\ -> \, \, -> ,, \; -> ;, \n -> newline
-function decodeICalText(text: string): string {
-  return text
-    .replace(/\\\\/g, '\\')
-    .replace(/\\,/g, ',')
-    .replace(/\\;/g, ';')
-    .replace(/\\n/g, '\n');
-}
+// Parse iCal text using ical.js library
 
-// Simple iCal parser with RRULE support
-function parseICal(icalText: string): GoogleCalendarEvent[] {
-  const events: GoogleCalendarEvent[] = [];
-  const lines = icalText.split(/\r?\n/);
+
+// Pre-filter iCal text to remove old non-recurring events
+// This avoids parsing huge files for events that won't be displayed
+function preFilterICalText(icalText: string): string {
+  const CUTOFF_MS = 6 * 30 * 24 * 60 * 60 * 1000; // 6 months
+  const now = Date.now();
+  const cutoffDate = new Date(now - CUTOFF_MS);
+  const cutoffStr = cutoffDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'; // YYYYMMDDTHHmmssZ approx
+  const cutoffYMD = cutoffStr.substring(0, 8); // YYYYMMDD
+
+  // Simple string builder
+  let result = '';
+  let lastIndex = 0;
+  let startIndex = 0;
   
-  let currentEvent: Partial<GoogleCalendarEvent> | null = null;
-  let recurrenceInfo: RecurrenceInfo = {};
-  
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+  // Find all VEVENT blocks
+  while ((startIndex = icalText.indexOf('BEGIN:VEVENT', lastIndex)) !== -1) {
+    // Append content before this event (headers, previous events, etc.)
+    result += icalText.substring(lastIndex, startIndex);
     
-    // Handle line continuation (lines starting with space)
-    while (i + 1 < lines.length && lines[i + 1].startsWith(' ')) {
-      line += lines[i + 1].substring(1);
-      i++;
+    // Find end of generic event block
+    const endIndex = icalText.indexOf('END:VEVENT', startIndex);
+    if (endIndex === -1) {
+        // Malformed, just keep everything else
+        result += icalText.substring(startIndex);
+        lastIndex = icalText.length;
+        break;
     }
     
-    if (line.startsWith('BEGIN:VEVENT')) {
-      currentEvent = {
-        start: {},
-        end: {},
-      };
-      recurrenceInfo = {};
-    } else if (line.startsWith('END:VEVENT') && currentEvent) {
-      // If no end date, use start date + 1 hour for timed events, or same day for all-day
-      if (!currentEvent.end?.dateTime && !currentEvent.end?.date) {
-        if (currentEvent.start?.dateTime) {
-          const startDate = new Date(currentEvent.start.dateTime);
-          startDate.setHours(startDate.getHours() + 1);
-          currentEvent.end = { dateTime: startDate.toISOString() };
-        } else if (currentEvent.start?.date) {
-          currentEvent.end = { date: currentEvent.start.date };
-        }
-      }
-      
-      // Convert to GoogleCalendarEvent format
-      const baseEvent: GoogleCalendarEvent = {
-        id: currentEvent.id || `ical-${Date.now()}-${Math.random()}`,
-        summary: currentEvent.summary || 'No title',
-        description: currentEvent.description,
-        start: {
-          dateTime: currentEvent.start?.dateTime,
-          date: currentEvent.start?.date,
-        },
-        end: {
-          dateTime: currentEvent.end?.dateTime,
-          date: currentEvent.end?.date,
-        },
-        location: currentEvent.location,
-        htmlLink: currentEvent.htmlLink,
-        status: recurrenceInfo.status,
-        organizer: currentEvent.organizer,
-        attendees: currentEvent.attendees,
-      };
-      
-      // If there's a RECURRENCE-ID, this is a modified instance of a recurring event
-      // We should include it as-is, but we'll need to filter duplicates later
-      if (recurrenceInfo.recurrenceId) {
-        // This is a modified instance - add it directly with a special ID
-        baseEvent.id = `${baseEvent.id}-recurrence-${recurrenceInfo.recurrenceId}`;
-        // Preserve recurrence-id timezone info for deduplication
-        if (recurrenceInfo.recurrenceIdTzid) {
-          (baseEvent as any).recurrenceIdTzid = recurrenceInfo.recurrenceIdTzid;
-        }
-        events.push(baseEvent);
-      } else if (recurrenceInfo.rrule && baseEvent.start.dateTime) {
-        // If there's a RRULE, generate recurring occurrences
-        const occurrences = generateRecurringEvents(baseEvent, recurrenceInfo.rrule, recurrenceInfo.exdate || []);
-        events.push(...occurrences);
-      } else {
-        // Single event
-        events.push(baseEvent);
-      }
-      
-      currentEvent = null;
-      recurrenceInfo = {};
-    } else if (currentEvent) {
-      if (line.startsWith('UID:')) {
-        currentEvent.id = line.substring(4).trim();
-      } else if (line.startsWith('SUMMARY:')) {
-        currentEvent.summary = decodeICalText(line.substring(8).trim());
-      } else if (line.startsWith('DESCRIPTION:')) {
-        currentEvent.description = decodeICalText(line.substring(12).trim());
-      } else if (line.startsWith('DTSTART')) {
-        const match = line.match(/DTSTART(?:;TZID=([^:]+))?:(.+)/);
-        if (match) {
-          const tzid = match[1];
-          const value = match[2].trim();
-          if (value.length === 8) {
-            // Date only (YYYYMMDD)
-            const year = value.substring(0, 4);
-            const month = value.substring(4, 6);
-            const day = value.substring(6, 8);
-            currentEvent.start!.date = `${year}-${month}-${day}`;
-          } else {
-            // DateTime (YYYYMMDDTHHmmss or YYYYMMDDTHHmmssZ)
-            const dt = parseICalDateTime(value, tzid);
-            currentEvent.start!.dateTime = dt.toISOString();
-            if (tzid) {
-              currentEvent.start!.timeZone = tzid;
-            }
-          }
-        }
-      } else if (line.startsWith('DTEND')) {
-        const match = line.match(/DTEND(?:;TZID=([^:]+))?:(.+)/);
-        if (match) {
-          const tzid = match[1];
-          const value = match[2].trim();
-          if (value.length === 8) {
-            // Date only (YYYYMMDD)
-            const year = value.substring(0, 4);
-            const month = value.substring(4, 6);
-            const day = value.substring(6, 8);
-            currentEvent.end!.date = `${year}-${month}-${day}`;
-          } else {
-            // DateTime
-            const dt = parseICalDateTime(value, tzid);
-            currentEvent.end!.dateTime = dt.toISOString();
-            if (tzid) {
-              currentEvent.end!.timeZone = tzid;
-            }
-          }
-        }
-      } else if (line.startsWith('LOCATION:')) {
-        currentEvent.location = decodeICalText(line.substring(9).trim());
-      } else if (line.startsWith('URL:')) {
-        currentEvent.htmlLink = line.substring(4).trim();
-      } else if (line.startsWith('ORGANIZER')) {
-        // Format: ORGANIZER;CN=Name:mailto:email@example.com
-        const match = line.match(/ORGANIZER(?:;CN=([^:]+))?:(.+)/);
-        if (match) {
-          const email = match[2].replace(/^mailto:/i, '').trim();
-          const displayName = match[1] ? decodeICalText(match[1].trim()) : undefined;
-          if (!currentEvent.organizer) {
-            currentEvent.organizer = { email, displayName };
-          }
-        }
-      } else if (line.startsWith('ATTENDEE')) {
-        // Format: ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Name:mailto:email@example.com
-        // Extract CN (display name), PARTSTAT (response status), ROLE, and email
-        const cnMatch = line.match(/;CN=([^:;]+)/);
-        const partstatMatch = line.match(/;PARTSTAT=([^:;]+)/);
-        const roleMatch = line.match(/;ROLE=([^:;]+)/);
-        const emailMatch = line.match(/:mailto:([^\s]+)/i) || line.match(/:([^\s@]+@[^\s@]+)/);
+    const eventBlockEnd = endIndex + 10; // length of 'END:VEVENT'
+    const eventBlock = icalText.substring(startIndex, eventBlockEnd);
+    
+    // Check retention criteria
+    // 1. Keep if Recurrent (RRULE)
+    if (eventBlock.includes('RRULE:')) {
+        result += eventBlock;
+    } else {
+        // 2. Check dates (DTEND or DTSTART)
+        // Extract DTEND or DTSTART
+        // Optimization: Don't use heavy regex if possible, or use simple one
+        // DTSTART:20250101...
+        // DTSTART;TZID=...:20250101...
         
-        if (emailMatch) {
-          const email = emailMatch[1].trim().toLowerCase();
-          const displayName = cnMatch ? decodeICalText(cnMatch[1].trim()) : undefined;
-          const responseStatus = partstatMatch ? partstatMatch[1].trim().toUpperCase() : 'NEEDS-ACTION';
-          const role = roleMatch ? roleMatch[1].trim().toUpperCase() : undefined;
-          
-          if (!currentEvent.attendees) {
-            currentEvent.attendees = [];
-          }
-          
-          // Check if an attendee with this email already exists (handle duplicates)
-          const existingIndex = currentEvent.attendees.findIndex(
-            (attendee) => attendee.email?.toLowerCase() === email
-          );
-          
-          // Priority order for response status: ACCEPTED > TENTATIVE > DECLINED > NEEDS-ACTION
-          // Priority order for role: REQ-PARTICIPANT > OPT-PARTICIPANT
-          const statusPriority: Record<string, number> = {
-            'ACCEPTED': 4,
-            'TENTATIVE': 3,
-            'DECLINED': 2,
-            'NEEDS-ACTION': 1,
-          };
-          
-          const rolePriority: Record<string, number> = {
-            'REQ-PARTICIPANT': 2,
-            'OPT-PARTICIPANT': 1,
-          };
-          
-          const currentStatusPriority = statusPriority[responseStatus] || 0;
-          const currentRolePriority = rolePriority[role || ''] || 0;
-          
-          if (existingIndex >= 0) {
-            const existing = currentEvent.attendees[existingIndex];
-            const existingStatus = existing.responseStatus?.toUpperCase() || 'NEEDS-ACTION';
-            const existingStatusPriority = statusPriority[existingStatus] || 0;
-            
-            // Determine if we should replace based on priority
-            let shouldReplace = false;
-            
-            if (currentStatusPriority > existingStatusPriority) {
-              // Higher status priority wins
-              shouldReplace = true;
-            } else if (currentStatusPriority === existingStatusPriority) {
-              // Same status priority, check role priority
-              const existingRole = (existing as any).role?.toUpperCase();
-              const existingRolePriority = rolePriority[existingRole || ''] || 0;
-              
-              if (currentRolePriority > existingRolePriority) {
-                // Higher role priority wins
-                shouldReplace = true;
-              } else if (currentRolePriority === existingRolePriority) {
-                // Same priority, keep the latest (replace)
-                shouldReplace = true;
-              }
-            }
-            
-            if (shouldReplace) {
-              currentEvent.attendees[existingIndex] = {
-                email,
-                displayName,
-                responseStatus,
-                ...(role && { role }),
-              };
-            }
-          } else {
-            // Add new attendee
-            currentEvent.attendees.push({
-              email,
-              displayName,
-              responseStatus,
-              ...(role && { role }),
-            });
-          }
+        let dateVal = '';
+        
+        // Try DTEND first, then DTSTART
+        const endMatch = eventBlock.match(/DTEND(?:;[^:]*)?:(\d{8}(?:T\d{6}Z?)?)/);
+        if (endMatch) {
+            dateVal = endMatch[1];
+        } else {
+            const startMatch = eventBlock.match(/DTSTART(?:;[^:]*)?:(\d{8}(?:T\d{6}Z?)?)/);
+            if (startMatch) dateVal = startMatch[1];
         }
-      } else if (line.startsWith('RRULE:')) {
-        recurrenceInfo.rrule = line.substring(6).trim();
-      } else if (line.startsWith('RECURRENCE-ID')) {
-        const match = line.match(/RECURRENCE-ID(?:;TZID=([^:]+))?:(.+)/);
-        if (match) {
-          recurrenceInfo.recurrenceIdTzid = match[1]?.trim();
-          recurrenceInfo.recurrenceId = match[2].trim();
+        
+        if (dateVal) {
+             // String comparison is enough for ISO-like dates (YYYYMMDD...) 
+             // as long as we compare apples to apples.
+             // But we have YYYYMMDD and YYYYMMDDTHHmmss.
+             // Let's rely on YYYYMMDD part which is always first 8 chars.
+             const eventYMD = dateVal.substring(0, 8);
+             
+             if (eventYMD >= cutoffYMD) {
+                 result += eventBlock;
+             } else {
+                 // Discard (Old event)
+             }
+        } else {
+            // No date found? Keep to be safe
+            result += eventBlock;
         }
-      } else if (line.startsWith('EXDATE')) {
-        const match = line.match(/EXDATE(?:;TZID=([^:]+))?:(.+)/);
-        if (match) {
-          if (!recurrenceInfo.exdate) {
-            recurrenceInfo.exdate = [];
-          }
-          recurrenceInfo.exdate.push(match[2].trim());
-        }
-      } else if (line.startsWith('STATUS:')) {
-        recurrenceInfo.status = line.substring(7).trim();
-      }
     }
+    
+    lastIndex = eventBlockEnd;
   }
   
-  return events;
+  // Append remaining text (footer, etc.)
+  result += icalText.substring(lastIndex);
+  
+  return result;
 }
 
-// Parse iCal datetime format (YYYYMMDDTHHmmss or YYYYMMDDTHHmmssZ)
-// If tzid is provided, treat as local time in that timezone; otherwise treat as UTC if Z suffix
-function parseICalDateTime(value: string, tzid?: string): Date {
-  const isUTC = value.endsWith('Z');
-  const cleanValue = value.replace(/Z$/, '');
-  
-  // Format: YYYYMMDDTHHmmss
-  const year = parseInt(cleanValue.substring(0, 4), 10);
-  const month = parseInt(cleanValue.substring(4, 6), 10) - 1; // Month is 0-indexed
-  const day = parseInt(cleanValue.substring(6, 8), 10);
-  const hour = cleanValue.length > 9 ? parseInt(cleanValue.substring(9, 11), 10) : 0;
-  const minute = cleanValue.length > 11 ? parseInt(cleanValue.substring(11, 13), 10) : 0;
-  const second = cleanValue.length > 13 ? parseInt(cleanValue.substring(13, 15), 10) : 0;
-  
-  if (isUTC || !tzid) {
-    // If Z suffix or no timezone, treat as UTC
-    return new Date(Date.UTC(year, month, day, hour, minute, second));
-  } else {
-    // If timezone is specified, create date in local timezone
-    // Note: JavaScript Date doesn't support arbitrary timezones well, so we'll use local time
-    // This is a simplification - for full timezone support, we'd need a library like date-fns-tz
-    return new Date(year, month, day, hour, minute, second);
+// Parse iCal text using ical.js library
+function parseICal(icalText: string): GoogleCalendarEvent[] {
+  try {
+    // Pre-filter text to avoid processing unused old events
+    const filteredText = preFilterICalText(icalText);
+    const jcalData = ICAL.parse(filteredText);
+    const comp = new ICAL.Component(jcalData);
+    const vevents = comp.getAllSubcomponents('vevent');
+    
+    // Group events by UID to handle exceptions (RECURRENCE-ID)
+    const eventsByUid = new Map<string, { main?: any, exceptions: any[] }>();
+    
+    vevents.forEach((vevent: any) => {
+        const event = new ICAL.Event(vevent);
+        const uid = event.uid;
+        
+        if (!eventsByUid.has(uid)) {
+            eventsByUid.set(uid, { exceptions: [] });
+        }
+        
+        if (event.recurrenceId) {
+            eventsByUid.get(uid)!.exceptions.push(event);
+        } else {
+            // If multiple "main" events exist (unlikely in valid iCal but possible), last one wins or we handle as list?
+            // Usually only one main definition per UID.
+            eventsByUid.get(uid)!.main = event;
+        }
+    });
+
+    const events: GoogleCalendarEvent[] = [];
+    const now = new Date();
+    // @ts-ignore
+    const rangeStart = ICAL.Time.fromJSDate(new Date(now.getFullYear() - 1, now.getMonth(), 1)); // 1 year ago
+    // @ts-ignore
+    const rangeEnd = ICAL.Time.fromJSDate(new Date(now.getFullYear() + 2, now.getMonth(), 1)); // 2 years future
+    
+    // Helper to convert event to GoogleCalendarEvent
+    const convertToGoogleEvent = (event: any, start: any, end: any, idSuffix: string = ''): GoogleCalendarEvent => {
+        const isAllDay = start.isDate;
+        const organizer = event.organizer ? {
+            email: event.organizer.replace(/^mailto:/i, ''),
+            displayName: event.organizer 
+        } : undefined;
+        
+        const attendees: any[] = [];
+        // Access component directly for properties that might not be on the Event wrapper wrapper
+        if (event.component.hasProperty('attendee')) {
+             const attendeeProps = event.component.getAllProperties('attendee');
+             attendeeProps.forEach((prop: any) => {
+                  const email = prop.getFirstValue().replace(/^mailto:/i, '');
+                  attendees.push({
+                      email,
+                      displayName: prop.getParameter('cn'),
+                      responseStatus: prop.getParameter('partstat'),
+                      role: prop.getParameter('role')
+                  });
+             });
+        }
+        
+        return {
+            id: `${event.uid}${idSuffix}`,
+            summary: event.summary || 'No title',
+            description: event.description ? String(event.description) : undefined,
+            location: event.location ? String(event.location) : undefined,
+            start: isAllDay 
+              ? { date: `${start.year}-${String(start.month).padStart(2, '0')}-${String(start.day).padStart(2, '0')}` }
+              : { dateTime: start.toJSDate().toISOString() },
+            end: isAllDay
+              ? { date: `${end.year}-${String(end.month).padStart(2, '0')}-${String(end.day).padStart(2, '0')}` }
+              : { dateTime: end.toJSDate().toISOString() },
+            status: 'confirmed',
+            organizer,
+            attendees,
+            htmlLink: event.component.getFirstPropertyValue('url') ? String(event.component.getFirstPropertyValue('url')) : undefined,
+        };
+    };
+
+    eventsByUid.forEach(({ main, exceptions }) => {
+        // Map of exception times to skip in checking main recurrence
+        const exceptionTimes = new Set<string>();
+        
+        // Add exception events
+        exceptions.forEach(ex => {
+            // recurrencId is the time of the original occurrence it replaces
+            const rid = ex.recurrenceId;
+            if (rid) {
+                // Determine format based on rid type (date vs datetime)
+                // We use toICALString() for consistent comparison? Or just compare Time objects?
+                // Set stores string representation.
+                exceptionTimes.add(rid.toICALString());
+            }
+            // Add the exception event itself
+            events.push(convertToGoogleEvent(ex, ex.startDate, ex.endDate, `_except_${rid ? rid.toICALString() : 'unknown'}`));
+        });
+        
+        if (main) {
+            if (main.isRecurring()) {
+                const iterator = main.iterator();
+                let next: any;
+                let count = 0;
+                const maxCount = 2000;
+                
+                while ((next = iterator.next()) && count < maxCount) {
+                    const occ = main.getOccurrenceDetails(next);
+                    const occStart = occ.startDate;
+                    
+                    // Check if this occurrence matches an exception
+                    if (exceptionTimes.has(next.toICALString())) {
+                        // Skip this occurrence, it's handled by exception event
+                        continue;
+                    }
+
+                    if (occStart.compare(rangeEnd) > 0) break;
+                    if (occ.endDate.compare(rangeStart) < 0) continue;
+                    
+                    events.push(convertToGoogleEvent(main, occStart, occ.endDate, `_${occStart.toICALString()}`));
+                    count++;
+                }
+            } else {
+                // Single event (but might have exceptions if it was formerly recurring? Unlikely but possible)
+                // If it's single, just add it. Exceptions would be weird here but we added them already.
+                events.push(convertToGoogleEvent(main, main.startDate, main.endDate));
+            }
+        }
+    });
+
+    return events;
+  } catch (e) {
+    console.error('Error parsing iCal:', e);
+    return [];
   }
 }
 
 // Format a date into a timezone-aware key: YYYYMMDDTHHMM (wall time)
-function formatDateKey(dateInput: string | Date, tzid?: string): string {
-  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-  if (Number.isNaN(date.getTime())) return '';
-  if (!tzid) {
-    return date.toISOString().substring(0, 16).replace(/[-:]/g, '');
-  }
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tzid,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value || '';
-  const y = get('year');
-  const m = get('month');
-  const d = get('day');
-  const h = get('hour');
-  const min = get('minute');
-  return `${y}${m}${d}T${h}${min}`;
-}
-
-// Parse EXDATE to Date objects
-function parseExDates(exdates: string[]): Set<string> {
-  const excludedDates = new Set<string>();
-  for (const exdate of exdates) {
-    // EXDATE can be in format YYYYMMDD or YYYYMMDDTHHmmss
-    const cleanValue = exdate.replace(/Z$/, '');
-    if (cleanValue.length === 8) {
-      // Date only
-      excludedDates.add(cleanValue);
-    } else if (cleanValue.length >= 15) {
-      // DateTime - use date part only
-      excludedDates.add(cleanValue.substring(0, 8));
-    }
-  }
-  return excludedDates;
-}
-
-// Generate recurring events from RRULE
-function generateRecurringEvents(
-  baseEvent: GoogleCalendarEvent,
-  rrule: string,
-  exdates: string[]
-): GoogleCalendarEvent[] {
-  if (!baseEvent.start.dateTime) {
-    return [baseEvent]; // Can't generate recurrences without a start time
-  }
-
-
-  const startDate = new Date(baseEvent.start.dateTime);
-  const endDate = baseEvent.end?.dateTime ? new Date(baseEvent.end.dateTime) : null;
-  const duration = endDate ? endDate.getTime() - startDate.getTime() : 60 * 60 * 1000; // Default 1 hour
-
-  // Parse RRULE
-  // Format: FREQ=WEEKLY;WKST=MO;UNTIL=20251215T130000Z;INTERVAL=1;BYDAY=MO
-  const params: Record<string, string> = {};
-  rrule.split(';').forEach((param) => {
-    const [key, value] = param.split('=');
-    if (key && value) {
-      params[key] = value;
-    }
-  });
-
-  const freq = params.FREQ;
-  const interval = parseInt(params.INTERVAL || '1', 10);
-  const until = params.UNTIL ? parseICalDateTime(params.UNTIL) : null;
-  const count = params.COUNT ? parseInt(params.COUNT, 10) : null;
-  const byday = params.BYDAY ? params.BYDAY.split(',') : null;
-
-  // Parse excluded dates
-  const excludedDates = parseExDates(exdates);
-
-  const occurrences: GoogleCalendarEvent[] = [];
-  let currentDate = new Date(startDate);
-  let occurrenceCount = 0;
-  const maxOccurrences = 1000; // Safety limit
-  const maxDate = new Date();
-  maxDate.setFullYear(maxDate.getFullYear() + 2); // Limit to 2 years in the future
-
-  // Day of week mapping (iCal uses MO, TU, WE, etc.)
-  const dayMap: Record<string, number> = {
-    SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6,
-  };
-
-  while (occurrenceCount < maxOccurrences) {
-    // Check if we've exceeded the UNTIL date
-    if (until && currentDate > until) {
-      break;
-    }
-
-    // Check if we've exceeded the max date
-    if (currentDate > maxDate) {
-      break;
-    }
-
-    // Check if this date is excluded
-    const dateKey = currentDate.toISOString().substring(0, 10).replace(/-/g, '');
-    const dateKeyShort = dateKey.substring(0, 8);
-    if (!excludedDates.has(dateKeyShort)) {
-      // Create occurrence
-      const occurrenceStart = new Date(currentDate);
-      const occurrenceEnd = new Date(occurrenceStart.getTime() + duration);
-
-      const occurrence: GoogleCalendarEvent = {
-        ...baseEvent,
-        id: `${baseEvent.id}-${occurrenceCount}`,
-        start: {
-          dateTime: occurrenceStart.toISOString(),
-          ...(baseEvent.start as any)?.timeZone ? { timeZone: (baseEvent.start as any).timeZone } : {},
-        },
-        end: {
-          dateTime: occurrenceEnd.toISOString(),
-          ...(baseEvent.end as any)?.timeZone ? { timeZone: (baseEvent.end as any).timeZone } : {},
-        },
-        // Keep status if it's CANCELLED (for declined events)
-        status: baseEvent.status,
-        // Keep attendees and organizer for response status detection
-        attendees: baseEvent.attendees,
-        organizer: baseEvent.organizer,
-      };
-
-
-      occurrences.push(occurrence);
-      occurrenceCount++;
-
-      // Check count limit
-      if (count && occurrenceCount >= count) {
-        break;
-      }
-    }
-
-    // Calculate next occurrence based on frequency
-    if (freq === 'DAILY') {
-      currentDate.setDate(currentDate.getDate() + interval);
-    } else if (freq === 'WEEKLY') {
-      if (byday && byday.length > 0) {
-        // Find next occurrence of specified day(s)
-        const currentDay = currentDate.getDay();
-        const targetDays = byday.map((d) => dayMap[d] ?? -1).filter((d) => d >= 0);
-        
-        if (targetDays.length > 0) {
-          // Find next target day
-          let daysToAdd = interval * 7;
-          let found = false;
-          
-          // Check if there's a target day in the current week
-          for (const targetDay of targetDays) {
-            if (targetDay > currentDay) {
-              daysToAdd = targetDay - currentDay;
-              found = true;
-              break;
-            }
-          }
-          
-          // If not found in current week, go to first target day of next interval
-          if (!found) {
-            daysToAdd = interval * 7 - currentDay + targetDays[0];
-          }
-          
-          currentDate.setDate(currentDate.getDate() + daysToAdd);
-        } else {
-          currentDate.setDate(currentDate.getDate() + interval * 7);
-        }
-      } else {
-        currentDate.setDate(currentDate.getDate() + interval * 7);
-      }
-    } else if (freq === 'MONTHLY') {
-      currentDate.setMonth(currentDate.getMonth() + interval);
-    } else if (freq === 'YEARLY') {
-      currentDate.setFullYear(currentDate.getFullYear() + interval);
-    } else {
-      // Unknown frequency, stop
-      break;
-    }
-  }
-
-  return occurrences;
+function formatDateKey(dateInput: string | Date, _tzid?: string): string {
+    // Only used for deduplication map now, kept simple
+     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+     return date.toISOString();
 }
 
 // Cache configuration
@@ -588,6 +343,8 @@ async function saveCachedICalEvents(icalUrl: string, events: GoogleCalendarEvent
       timestamp: Date.now(),
     };
     
+    // console.log('[ICal Cache] Saving events to cache. Count:', events.length);
+    
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       chrome.storage.local.set({ [cacheKey]: JSON.stringify(cacheData) }, () => {
         if (chrome.runtime.lastError) {
@@ -613,11 +370,20 @@ async function saveCachedICalEvents(icalUrl: string, events: GoogleCalendarEvent
 // Refresh iCal cache in background (called when using stale cache)
 async function refreshICalCache(icalUrl: string): Promise<void> {
   try {
-    const response = await fetch(icalUrl, {
+    // Add cache busting to force refresh
+    const url = new URL(icalUrl);
+    url.searchParams.set('_t', Date.now().toString());
+
+    // console.log('[ICal Cache] Background refreshing from:', url.toString());
+
+    const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
         'Accept': 'text/calendar, text/plain, */*',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
       },
+      cache: 'reload',
     });
     
     if (!response.ok) {
@@ -643,7 +409,10 @@ async function refreshICalCache(icalUrl: string): Promise<void> {
     // Filter to keep only future events and today's events for cache
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const cacheCutoff = todayStart.getTime();
+    // Keep events from the last 90 days to ensure current month history is available
+    const cutoffDate = new Date(todayStart);
+    cutoffDate.setDate(cutoffDate.getDate() - 90);
+    const cacheCutoff = cutoffDate.getTime();
     
     const eventsToCache = allEvents.filter((event) => {
       const eventEnd = event.end?.dateTime || event.end?.date;
@@ -659,8 +428,34 @@ async function refreshICalCache(icalUrl: string): Promise<void> {
   }
 }
 
+// Parse iCal datetime format (YYYYMMDDTHHmmss or YYYYMMDDTHHmmssZ)
+// If tzid is provided, treat as local time in that timezone; otherwise treat as UTC if Z suffix
+function parseICalDateTime(value: string, tzid?: string): Date {
+  const isUTC = value.endsWith('Z');
+  const cleanValue = value.replace(/Z$/, '');
+  
+  // Format: YYYYMMDDTHHmmss
+  const year = parseInt(cleanValue.substring(0, 4), 10);
+  const month = parseInt(cleanValue.substring(4, 6), 10) - 1; // Month is 0-indexed
+  const day = parseInt(cleanValue.substring(6, 8), 10);
+  const hour = cleanValue.length > 9 ? parseInt(cleanValue.substring(9, 11), 10) : 0;
+  const minute = cleanValue.length > 11 ? parseInt(cleanValue.substring(11, 13), 10) : 0;
+  const second = cleanValue.length > 13 ? parseInt(cleanValue.substring(13, 15), 10) : 0;
+  
+  if (isUTC || !tzid) {
+    // If Z suffix or no timezone, treat as UTC
+    return new Date(Date.UTC(year, month, day, hour, minute, second));
+  } else {
+    // If timezone is specified, create date in local timezone
+    return new Date(year, month, day, hour, minute, second);
+  }
+}
+
 // Fetch events from iCal URL (background refresh if using stale cache)
-async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleCalendarEvent[]> {
+async function fetchICalEvents(icalUrl: string, period: string, forceRefresh: boolean = false): Promise<GoogleCalendarEvent[]> {
+  const log = (msg: string, ...args: any[]) => console.log(`[iCal Fetch] ${msg}`, ...args);
+  log('Starting fetch. Period:', period, 'ForceRefresh:', forceRefresh);
+
   try {
     // Validate URL format
     try {
@@ -670,7 +465,15 @@ async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleC
     }
 
     // Try to load from cache first (allow expired cache if it has today's events)
-    const cachedResult = await loadCachedICalEvents(icalUrl, true);
+    // If forceRefresh is true, skip cache lookup
+    let cachedResult = null;
+    if (!forceRefresh) {
+      cachedResult = await loadCachedICalEvents(icalUrl, true);
+      log('Cache lookup result:', !!cachedResult);
+    } else {
+      log('Skipping cache due to forceRefresh');
+    }
+    
     if (cachedResult) {
       const { events: cachedEvents, expired } = cachedResult;
       
@@ -706,6 +509,7 @@ async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleC
       
       // If cache is expired, refresh in background
       if (expired) {
+        log('Cache expired, triggering background refresh');
         // Don't await - refresh in background
         refreshICalCache(icalUrl).catch((err: unknown) => {
           console.error('[iCal Cache] Background refresh failed:', err);
@@ -716,13 +520,25 @@ async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleC
     }
 
     // Cache miss or expired without today's events, fetch from URL
-    const response = await fetch(icalUrl, {
+    const url = new URL(icalUrl);
+    // Add cache busting if forcing refresh
+    if (forceRefresh) {
+      url.searchParams.set('_t', Date.now().toString());
+    }
+
+    log('Fetching from URL:', url.toString());
+
+    const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
         'Accept': 'text/calendar, text/plain, */*',
+        ...(forceRefresh ? { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } : {}),
       },
+      cache: forceRefresh ? 'reload' : 'default',
     });
     
+    log('Response status:', response.status);
+
     if (!response.ok) {
       const statusText = response.statusText || `HTTP ${response.status}`;
       if (response.status === 404) {
@@ -737,6 +553,7 @@ async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleC
     }
     
     const icalText = await response.text();
+    log('Fetched text length:', icalText.length);
     
     if (!icalText || icalText.trim().length === 0) {
       throw new Error('The iCal URL returned an empty response. Please verify the URL is correct.');
@@ -748,6 +565,7 @@ async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleC
     }
     
     let allEvents = parseICal(icalText);
+    log('Parsed events count:', allEvents.length);
 
     // Deduplicate events: if there's a RECURRENCE-ID event, remove the corresponding generated occurrence
     // Events with RECURRENCE-ID have IDs like "uid-recurrence-20251215T140000"
@@ -820,7 +638,10 @@ async function fetchICalEvents(icalUrl: string, period: string): Promise<GoogleC
     // Filter to keep only future events and today's events for cache (to save storage space)
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const cacheCutoff = todayStart.getTime(); // Keep events from today onwards
+    // Keep events from the last 90 days to ensure current month history is available
+    const cutoffDate = new Date(todayStart);
+    cutoffDate.setDate(cutoffDate.getDate() - 90);
+    const cacheCutoff = cutoffDate.getTime();
     
     const eventsToCache = allEvents.filter((event) => {
       const eventEnd = event.end?.dateTime || event.end?.date;
@@ -1137,6 +958,24 @@ function getDateRange(period: string): { timeMin: string; timeMax: string } {
     case 'week':
       days = 7;
       break;
+    case 'month':
+      // For month view, we need a special calculation
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      
+      // Add buffer (1 week before and after) to cover grid overlaps
+      const timeMin = new Date(firstDayOfMonth);
+      timeMin.setDate(timeMin.getDate() - 7);
+      timeMin.setHours(0, 0, 0, 0);
+      
+      const timeMax = new Date(lastDayOfMonth);
+      timeMax.setDate(timeMax.getDate() + 7);
+      timeMax.setHours(23, 59, 59, 999);
+      
+      return {
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+      };
     default:
       days = 1;
   }
@@ -1159,7 +998,8 @@ function getDateRange(period: string): { timeMin: string; timeMax: string } {
 
 // Fetch events for selected calendars with automatic token refresh
 export async function fetchGoogleCalendarEvents(
-  config: GoogleCalendarConfig
+  config: GoogleCalendarConfig,
+  forceRefresh: boolean = false
 ): Promise<GoogleCalendarEvent[]> {
   const authType = config.authType || (config.accessToken ? 'oauth' : 'ical');
   
@@ -1168,7 +1008,7 @@ export async function fetchGoogleCalendarEvents(
     if (!config.icalUrl) {
       return [];
     }
-    return fetchICalEvents(config.icalUrl, config.period);
+    return fetchICalEvents(config.icalUrl, config.period, forceRefresh);
   }
   
   // Handle OAuth
@@ -1255,20 +1095,108 @@ export function groupEventsByDay(events: GoogleCalendarEvent[]): Map<string, Goo
   const grouped = new Map<string, GoogleCalendarEvent[]>();
 
   events.forEach((event) => {
-    const startDate = event.start.dateTime || event.start.date;
+    const startDate = event.start.dateTime 
+      ? new Date(event.start.dateTime)
+      : event.start.date 
+      ? new Date(event.start.date)
+      : null;
+      
     if (!startDate) return;
 
-    const date = new Date(startDate);
-    // Format date as YYYY-MM-DD in local timezone (not UTC)
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const dayKey = `${year}-${month}-${day}`;
+    // Determine end date (exclusive for all-day, inclusive/point for timed?)
+    // For grouping, we want to cover all days that the event touches.
+    // If it's all-day, end date is usually T+1 00:00. So we iterate until end-1 day.
+    // If it's timed, we iterate all days it touches.
+    
+    let endDate = event.end?.dateTime 
+      ? new Date(event.end.dateTime)
+      : event.end?.date 
+      ? new Date(event.end.date)
+      : new Date(startDate);
 
-    if (!grouped.has(dayKey)) {
-      grouped.set(dayKey, []);
+    // If no end date, assume same day
+    if (!event.end?.dateTime && !event.end?.date) {
+      endDate = new Date(startDate);
     }
-    grouped.get(dayKey)!.push(event);
+    
+    // Normalize to dates (midnight representation for iteration)
+    const current = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const stop = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    
+    // If it's data-only all-day event, the end date is exclusive.
+    // e.g. Start 2025-01-01, End 2025-01-02 -> Only 2025-01-01.
+    // e.g. Start 2025-01-01, End 2025-01-04 -> 01, 02, 03.
+    // For timed events: Start 2025-01-01 23:00, End 2025-01-02 01:00 -> 01, 02.
+    // We'll iterate while current < stop (if all-day) or current <= stop (if timed and touches next day?)
+    // To simplify: iterate from start day. If it's all-day, stop before end day.
+    // If it's timed and ends at midnight, stop before. If ends after midnight, include.
+    
+    const isAllDay = !!event.start.date;
+    
+    // Adjust stop condition
+    if (isAllDay) {
+       // All-day end is exclusive
+    } else {
+       // Timed event. 
+       // If end is exactly 00:00:00, it belongs to previous day (effectively exclusive).
+       if (endDate.getHours() === 0 && endDate.getMinutes() === 0 && endDate.getSeconds() === 0 && endDate.getMilliseconds() === 0) {
+         // keep stop as is (exclusive)
+       } else {
+         // ends during the day, so that day is included. 
+         // But our loop creates dates at 00:00.
+         // If start is 01-01 23:00, end 01-02 01:00.
+         // current = 01-01. stop = 01-02.
+         // We want to include 01-02. 
+         // So we need to iterate while current <= stop?
+         // If we iterate current <= stop, we get 01-02. Correct.
+         // But wait, if event is on single day 13:00 to 14:00. current=01-01, stop=01-01.
+         // current <= stop -> runs once. Correct.
+         
+         // So for timed events, we want <= stop?
+         // But wait, what if we manually increment current and check?
+         
+         // Let's use a simpler approach: 
+         // Always treat as inclusive range of days.
+         // If (timed) end > start date-part, include end date-part.
+         // Unless end is exactly midnight?
+         if (endDate.getTime() > stop.getTime()) {
+            // End has time component on the stop day (e.g. 01:00)
+            // So we include it.
+            // We can just increment stop by 1 day to make the < loop work?
+            stop.setDate(stop.getDate() + 1);
+         }
+       }
+    }
+    
+    // Safety break to prevent infinite loops for bad data
+    let daysCount = 0;
+    const MAX_DAYS = 366; 
+
+    while (current < stop && daysCount < MAX_DAYS) {
+      const year = current.getFullYear();
+      const month = String(current.getMonth() + 1).padStart(2, '0');
+      const day = String(current.getDate()).padStart(2, '0');
+      const dayKey = `${year}-${month}-${day}`;
+
+      if (!grouped.has(dayKey)) {
+        grouped.set(dayKey, []);
+      }
+      grouped.get(dayKey)!.push(event);
+
+      // Next day
+      current.setDate(current.getDate() + 1);
+      daysCount++;
+    }
+    
+    // Fallback: if loop didn't run (e.g. timed event 13:00-14:00, start=stop, no increment), add at least start date
+    if (daysCount === 0) {
+        const year = startDate.getFullYear();
+        const month = String(startDate.getMonth() + 1).padStart(2, '0');
+        const day = String(startDate.getDate()).padStart(2, '0');
+        const dayKey = `${year}-${month}-${day}`;
+        if (!grouped.has(dayKey)) grouped.set(dayKey, []);
+        grouped.get(dayKey)!.push(event);
+    }
   });
 
   return grouped;
