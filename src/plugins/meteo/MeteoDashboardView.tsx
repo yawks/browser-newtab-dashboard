@@ -10,10 +10,11 @@ function formatDate(dateString: string) {
   return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-export function MeteoDashboardView({ config }: PluginComponentProps) {
+export function MeteoDashboardView({ config, frameId }: PluginComponentProps) {
   const meteoConfig = (config as unknown as MeteoConfig & { mockData?: MeteoWeatherData }) || {
     provider: 'openweather',
     apiKey: '',
+    cacheDuration: 3600,
   };
 
   const [weather, setWeather] = useState<MeteoWeatherData | null>(null);
@@ -24,8 +25,7 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const currentSectionRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const loadWeather = async () => {
+  const loadWeather = async (forceRefresh: boolean = false) => {
       // Check if mock data is provided
       if (meteoConfig.mockData) {
         setWeather(meteoConfig.mockData);
@@ -44,7 +44,8 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
       setError(null);
 
       try {
-        const data = await fetchMeteoData(meteoConfig);
+        const cacheDuration = meteoConfig.cacheDuration ?? 3600;
+        const data = await fetchMeteoData(meteoConfig, forceRefresh, frameId, cacheDuration);
         setWeather(data);
       } catch (err) {
         console.error(err);
@@ -54,14 +55,30 @@ export function MeteoDashboardView({ config }: PluginComponentProps) {
       }
     };
 
+  useEffect(() => {
     loadWeather();
 
     // Only set up refresh interval if not using mock data
     if (!meteoConfig.mockData) {
-      const interval = setInterval(loadWeather, 10 * 60 * 1000);
+      const interval = setInterval(() => loadWeather(false), 10 * 60 * 1000);
       return () => clearInterval(interval);
     }
   }, [meteoConfig.apiKey, meteoConfig.latitude, meteoConfig.longitude, meteoConfig.provider, meteoConfig.cityName, meteoConfig.mockData]);
+
+  // Register refresh function for Frame.tsx to call when refresh button is clicked
+  const loadWeatherRef = useRef(loadWeather);
+  useEffect(() => {
+    loadWeatherRef.current = loadWeather;
+  }, [loadWeather]);
+
+  useEffect(() => {
+    if (frameId) {
+      (globalThis as any)[`__pluginRefresh_${frameId}`] = () => loadWeatherRef.current(true);
+      return () => {
+        delete (globalThis as any)[`__pluginRefresh_${frameId}`];
+      };
+    }
+  }, [frameId]);
 
   useEffect(() => {
     if (!containerRef.current) return;

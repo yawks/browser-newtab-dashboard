@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { PluginComponentProps } from '@/types/plugin';
 import { TasktroveConfig, TasktroveTask, TasktroveLabel, TasktroveProject } from './types';
 import { fetchTasktroveTasks, fetchTasktroveLabels, fetchTasktroveProjects, updateTasktroveTask } from './api';
@@ -65,8 +65,8 @@ function getPriorityLabel(priority: number | null | undefined): string {
   return 'No priority';
 }
 
-export function TasktroveDashboardView({ config }: PluginComponentProps) {
-  const tasktroveConfig = (config as unknown as TasktroveConfig & { 
+export function TasktroveDashboardView({ config, frameId }: PluginComponentProps) {
+  const tasktroveConfig = (config as unknown as TasktroveConfig & {
     mockData?: {
       tasks?: TasktroveTask[];
       labels?: TasktroveLabel[];
@@ -75,6 +75,7 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
   }) || {
     apiEndpoint: '',
     apiToken: '',
+    cacheDuration: 3600,
   };
 
   const [tasks, setTasks] = useState<TasktroveTask[]>([]);
@@ -83,8 +84,7 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadData = async () => {
+  const loadData = async (forceRefresh: boolean = false) => {
       // Check if mock data is provided
       if (tasktroveConfig.mockData) {
         const mockTasks = tasktroveConfig.mockData.tasks || [];
@@ -171,11 +171,13 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
       setError(null);
 
       try {
+        const cacheDuration = tasktroveConfig.cacheDuration ?? 3600;
+
         // Load all data in parallel
         const [fetchedTasks, fetchedLabels, fetchedProjects] = await Promise.all([
-          fetchTasktroveTasks(tasktroveConfig),
-          fetchTasktroveLabels(tasktroveConfig),
-          fetchTasktroveProjects(tasktroveConfig),
+          fetchTasktroveTasks(tasktroveConfig, forceRefresh, frameId, cacheDuration),
+          fetchTasktroveLabels(tasktroveConfig, forceRefresh, frameId, cacheDuration),
+          fetchTasktroveProjects(tasktroveConfig, forceRefresh, frameId, cacheDuration),
         ]);
 
         console.log('TasktroveDashboardView - fetched tasks:', fetchedTasks);
@@ -257,14 +259,30 @@ export function TasktroveDashboardView({ config }: PluginComponentProps) {
       }
     };
 
+  useEffect(() => {
     loadData();
 
     // Only set up refresh interval if not using mock data
     if (!tasktroveConfig.mockData) {
-      const interval = setInterval(loadData, 5 * 60 * 1000);
+      const interval = setInterval(() => loadData(false), 5 * 60 * 1000);
       return () => clearInterval(interval);
     }
   }, [tasktroveConfig.apiEndpoint, tasktroveConfig.apiToken, tasktroveConfig.statusFilter, tasktroveConfig.projectIds, tasktroveConfig.labelIds, tasktroveConfig.mockData]);
+
+  // Register refresh function for Frame.tsx to call when refresh button is clicked
+  const loadDataRef = useRef(loadData);
+  useEffect(() => {
+    loadDataRef.current = loadData;
+  }, [loadData]);
+
+  useEffect(() => {
+    if (frameId) {
+      (globalThis as any)[`__pluginRefresh_${frameId}`] = () => loadDataRef.current(true);
+      return () => {
+        delete (globalThis as any)[`__pluginRefresh_${frameId}`];
+      };
+    }
+  }, [frameId]);
 
   if (isLoading) {
     return (

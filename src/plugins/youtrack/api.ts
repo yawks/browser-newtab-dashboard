@@ -1,12 +1,24 @@
 import { YoutrackConfig, YoutrackIssue } from './types';
+import { loadFromCache, saveToCache } from '@/lib/cache';
 
 const REQUEST_TIMEOUT_SECS = 30000; // 30 seconds in milliseconds
 const MAX_ISSUES = 20;
 
 export async function fetchYoutrackIssues(
   config: YoutrackConfig,
-  query?: string
+  query?: string,
+  forceRefresh: boolean = false,
+  frameId?: string,
+  cacheDuration?: number
 ): Promise<YoutrackIssue[]> {
+  // Try to load from cache first
+  if (!forceRefresh && frameId && cacheDuration) {
+    const cached = await loadFromCache<YoutrackIssue[]>(frameId, cacheDuration);
+    if (cached) {
+      return cached;
+    }
+  }
+
   const params = new URLSearchParams({
     $top: MAX_ISSUES.toString(),
     fields: config.issueFields,
@@ -64,10 +76,17 @@ export async function fetchYoutrackIssues(
 
   // Sort by created date (oldest first)
   // Youtrack timestamps are in milliseconds
-  return issues.sort((a, b) => {
+  const sortedIssues = issues.sort((a, b) => {
     const aCreated = a.created || 0;
     const bCreated = b.created || 0;
     return aCreated - bCreated;
   });
+
+  // Save to cache if frameId is provided
+  if (frameId) {
+    await saveToCache(frameId, sortedIssues);
+  }
+
+  return sortedIssues;
 }
 

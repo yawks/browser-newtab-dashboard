@@ -1,6 +1,6 @@
 import { AlertCircle, Bug, CheckSquare, Loader2, Sparkles } from 'lucide-react';
 import { YoutrackConfig, YoutrackIssue } from './types';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { PluginComponentProps } from '@/types/plugin';
 import { fetchYoutrackIssues } from './api';
@@ -84,66 +84,86 @@ function getTagColor(tagName: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function YoutrackDashboardView({ config }: PluginComponentProps) {
+export function YoutrackDashboardView({ config, frameId }: PluginComponentProps) {
   const youtrackConfig = (config as unknown as YoutrackConfig & { mockData?: YoutrackIssue[] }) || {
     baseUrl: '',
     apiEndpoint: '',
     authorizationHeader: '',
     issueFields: '',
     query: '',
+    cacheDuration: 3600,
   };
 
   const [issues, setIssues] = useState<YoutrackIssue[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadIssues = async () => {
-      // Check if mock data is provided
-      if (youtrackConfig.mockData && Array.isArray(youtrackConfig.mockData)) {
-        setIssues(youtrackConfig.mockData);
-        setIsLoading(false);
-        setError(null);
-        return;
-      }
-
-      // Check if configuration is complete
-      if (
-        !youtrackConfig.apiEndpoint ||
-        !youtrackConfig.authorizationHeader ||
-        !youtrackConfig.issueFields
-      ) {
-        setError('Configuration incomplete. Please configure the widget in edit mode.');
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
+  const loadIssues = async (forceRefresh: boolean = false) => {
+    // Check if mock data is provided
+    if (youtrackConfig.mockData && Array.isArray(youtrackConfig.mockData)) {
+      setIssues(youtrackConfig.mockData);
+      setIsLoading(false);
       setError(null);
+      return;
+    }
 
-      try {
-        const fetchedIssues = await fetchYoutrackIssues(
-          youtrackConfig,
-          youtrackConfig.query
-        );
-        setIssues(fetchedIssues);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch issues';
-        setError(errorMessage);
-        setIssues([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    // Check if configuration is complete
+    if (
+      !youtrackConfig.apiEndpoint ||
+      !youtrackConfig.authorizationHeader ||
+      !youtrackConfig.issueFields
+    ) {
+      setError('Configuration incomplete. Please configure the widget in edit mode.');
+      setIsLoading(false);
+      return;
+    }
 
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const cacheDuration = youtrackConfig.cacheDuration ?? 3600;
+      const fetchedIssues = await fetchYoutrackIssues(
+        youtrackConfig,
+        youtrackConfig.query,
+        forceRefresh,
+        frameId,
+        cacheDuration
+      );
+      setIssues(fetchedIssues);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch issues';
+      setError(errorMessage);
+      setIssues([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadIssues();
 
     // Only set up refresh interval if not using mock data
     if (!youtrackConfig.mockData) {
-      const interval = setInterval(loadIssues, 5 * 60 * 1000);
+      const interval = setInterval(() => loadIssues(false), 5 * 60 * 1000);
       return () => clearInterval(interval);
     }
   }, [youtrackConfig.apiEndpoint, youtrackConfig.authorizationHeader, youtrackConfig.issueFields, youtrackConfig.query, youtrackConfig.baseUrl, youtrackConfig.mockData]);
+
+  // Register refresh function for Frame.tsx to call when refresh button is clicked
+  const loadIssuesRef = useRef(loadIssues);
+  useEffect(() => {
+    loadIssuesRef.current = loadIssues;
+  }, [loadIssues]);
+
+  useEffect(() => {
+    if (frameId) {
+      (globalThis as any)[`__pluginRefresh_${frameId}`] = () => loadIssuesRef.current(true);
+      return () => {
+        delete (globalThis as any)[`__pluginRefresh_${frameId}`];
+      };
+    }
+  }, [frameId]);
 
   if (isLoading) {
     return (

@@ -1,4 +1,5 @@
 import { TasktroveConfig, TasktroveTask, TasktroveApiResponse, TasktroveTaskRaw, TasktroveLabel, TasktroveProject, TasktroveLabelsResponse, TasktroveProjectsResponse } from './types';
+import { loadFromCache, saveToCache } from '@/lib/cache';
 
 const REQUEST_TIMEOUT_SECS = 30000; // 30 seconds in milliseconds
 
@@ -26,8 +27,19 @@ function processTask(rawTask: TasktroveTaskRaw): TasktroveTask {
 }
 
 export async function fetchTasktroveTasks(
-  config: TasktroveConfig
+  config: TasktroveConfig,
+  forceRefresh: boolean = false,
+  frameId?: string,
+  cacheDuration?: number
 ): Promise<TasktroveTask[]> {
+  // Try to load from cache first
+  if (!forceRefresh && frameId && cacheDuration) {
+    const cached = await loadFromCache<TasktroveTask[]>(frameId, cacheDuration);
+    if (cached) {
+      return cached;
+    }
+  }
+
   const url = `${config.apiEndpoint}/tasks`;
 
   const response = await fetch(url, {
@@ -59,15 +71,33 @@ export async function fetchTasktroveTasks(
 
   // Process the tasks from the API response
   if (data && Array.isArray(data.tasks)) {
-    return data.tasks.map(processTask);
+    const tasks = data.tasks.map(processTask);
+
+    // Save to cache if frameId is provided
+    if (frameId) {
+      await saveToCache(frameId, tasks);
+    }
+
+    return tasks;
   }
 
   throw new Error('Invalid response format: expected a tasks array');
 }
 
 export async function fetchTasktroveLabels(
-  config: TasktroveConfig
+  config: TasktroveConfig,
+  forceRefresh: boolean = false,
+  frameId?: string,
+  cacheDuration?: number
 ): Promise<TasktroveLabel[]> {
+  // Try to load from cache first (use frameId_labels as cache key)
+  if (!forceRefresh && frameId && cacheDuration) {
+    const cached = await loadFromCache<TasktroveLabel[]>(`${frameId}_labels`, cacheDuration);
+    if (cached) {
+      return cached;
+    }
+  }
+
   const url = `${config.apiEndpoint}/labels`;
 
   const response = await fetch(url, {
@@ -98,15 +128,33 @@ export async function fetchTasktroveLabels(
   const data: TasktroveLabelsResponse = await response.json();
 
   if (data && Array.isArray(data.labels)) {
-    return data.labels;
+    const labels = data.labels;
+
+    // Save to cache if frameId is provided
+    if (frameId) {
+      await saveToCache(`${frameId}_labels`, labels);
+    }
+
+    return labels;
   }
 
   throw new Error('Invalid response format: expected a labels array');
 }
 
 export async function fetchTasktroveProjects(
-  config: TasktroveConfig
+  config: TasktroveConfig,
+  forceRefresh: boolean = false,
+  frameId?: string,
+  cacheDuration?: number
 ): Promise<TasktroveProject[]> {
+  // Try to load from cache first (use frameId_projects as cache key)
+  if (!forceRefresh && frameId && cacheDuration) {
+    const cached = await loadFromCache<TasktroveProject[]>(`${frameId}_projects`, cacheDuration);
+    if (cached) {
+      return cached;
+    }
+  }
+
   const url = `${config.apiEndpoint}/projects`;
 
   const response = await fetch(url, {
@@ -137,7 +185,14 @@ export async function fetchTasktroveProjects(
   const data: TasktroveProjectsResponse = await response.json();
 
   if (data && Array.isArray(data.projects)) {
-    return data.projects;
+    const projects = data.projects;
+
+    // Save to cache if frameId is provided
+    if (frameId) {
+      await saveToCache(`${frameId}_projects`, projects);
+    }
+
+    return projects;
   }
 
   throw new Error('Invalid response format: expected a projects array');

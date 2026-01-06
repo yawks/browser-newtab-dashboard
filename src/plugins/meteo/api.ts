@@ -5,6 +5,7 @@ import {
   MeteoForecastDay,
   MeteoProvider,
 } from './types';
+import { loadFromCache, saveToCache } from '@/lib/cache';
 
 const REQUEST_TIMEOUT = 30000;
 const OPENWEATHER_BASE = 'https://api.openweathermap.org';
@@ -129,11 +130,33 @@ async function fetchOpenWeatherData(config: MeteoConfig): Promise<MeteoWeatherDa
   };
 }
 
-export async function fetchMeteoData(config: MeteoConfig): Promise<MeteoWeatherData> {
+export async function fetchMeteoData(
+  config: MeteoConfig,
+  forceRefresh: boolean = false,
+  frameId?: string,
+  cacheDuration?: number
+): Promise<MeteoWeatherData> {
+  // Try to load from cache first
+  if (!forceRefresh && frameId && cacheDuration) {
+    const cached = await loadFromCache<MeteoWeatherData>(frameId, cacheDuration);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  let data: MeteoWeatherData;
+
   switch (config.provider) {
     case 'openweather':
     default:
-      return fetchOpenWeatherData(config);
+      data = await fetchOpenWeatherData(config);
   }
+
+  // Save to cache if frameId is provided
+  if (frameId) {
+    await saveToCache(frameId, data);
+  }
+
+  return data;
 }
 

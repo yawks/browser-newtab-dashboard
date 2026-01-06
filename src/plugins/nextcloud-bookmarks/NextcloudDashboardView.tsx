@@ -1,41 +1,65 @@
 import { NextcloudBookmark, NextcloudConfig } from './types';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { BookmarkCard } from './BookmarkCard';
 import { PluginComponentProps } from '@/types/plugin';
 import { fetchBookmarks } from './api';
 
-export function NextcloudDashboardView({ config }: PluginComponentProps) {
+export function NextcloudDashboardView({ config, frameId }: PluginComponentProps) {
   const nextConfig: NextcloudConfig = {
     baseUrl: (config as unknown as NextcloudConfig)?.baseUrl,
     token: (config as unknown as NextcloudConfig)?.token,
     collectionId: (config as unknown as NextcloudConfig)?.collectionId,
     selectedTagIds: (config as unknown as NextcloudConfig)?.selectedTagIds || [],
     displayType: (config as unknown as NextcloudConfig)?.displayType || 'card',
+    cacheDuration: (config as unknown as NextcloudConfig)?.cacheDuration ?? 3600,
   };
 
   const [bookmarks, setBookmarks] = useState<NextcloudBookmark[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      if (!nextConfig.baseUrl || !nextConfig.token || !nextConfig.collectionId) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const fetched = await fetchBookmarks(nextConfig.baseUrl, nextConfig.token, nextConfig.collectionId, nextConfig.selectedTagIds);
-        setBookmarks(fetched);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Failed to load bookmarks';
-        setError(msg);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const load = async (forceRefresh: boolean = false) => {
+    if (!nextConfig.baseUrl || !nextConfig.token || !nextConfig.collectionId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const fetched = await fetchBookmarks(
+        nextConfig.baseUrl,
+        nextConfig.token,
+        nextConfig.collectionId,
+        nextConfig.selectedTagIds,
+        forceRefresh,
+        frameId,
+        nextConfig.cacheDuration
+      );
+      setBookmarks(fetched);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to load bookmarks';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     load();
   }, [config?.baseUrl, config?.token, config?.collectionId, JSON.stringify(config?.selectedTagIds)]);
+
+  // Register refresh function for Frame.tsx to call when refresh button is clicked
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+
+  useEffect(() => {
+    if (frameId) {
+      (globalThis as any)[`__pluginRefresh_${frameId}`] = () => loadRef.current(true);
+      return () => {
+        delete (globalThis as any)[`__pluginRefresh_${frameId}`];
+      };
+    }
+  }, [frameId]);
 
   if (!nextConfig.baseUrl || !nextConfig.token || !nextConfig.collectionId) {
     return (
