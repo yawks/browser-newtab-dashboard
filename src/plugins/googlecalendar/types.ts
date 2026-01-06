@@ -11,6 +11,7 @@ export interface GoogleCalendarConfig {
   userEmail?: string; // Current user's email for status detection
   // Which day week starts on in month view ('sunday' or 'monday')
   weekStart?: 'sunday' | 'monday';
+  cacheDuration?: number; // Cache duration in seconds
 }
 
 export interface GoogleCalendar {

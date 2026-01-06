@@ -7,6 +7,7 @@ export interface MeteoConfig {
   country?: string;
   latitude?: number;
   longitude?: number;
+  cacheDuration?: number;
 }
 
 export interface MeteoCitySuggestion {

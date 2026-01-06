@@ -6,6 +6,7 @@ export interface TasktroveConfig {
   statusFilter?: TasktroveStatusFilter;
   projectIds?: string[];
   labelIds?: string[];
+  cacheDuration?: number;
 }
 
 // Raw API response types

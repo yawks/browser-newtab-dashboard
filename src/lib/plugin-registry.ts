@@ -1,6 +1,7 @@
 import { Plugin, PluginMetadata } from '@/types/plugin';
 
 import { BookmarksPlugin } from '@/plugins/bookmarks/BookmarksPlugin';
+import { NextcloudBookmarksPlugin } from '@/plugins/nextcloud-bookmarks/NextcloudBookmarksPlugin';
 import { ClockPlugin } from '@/plugins/clock/ClockPlugin';
 import { FinancePlugin } from '@/plugins/finance/FinancePlugin';
 import { GoogleCalendarPlugin } from '@/plugins/googlecalendar/GoogleCalendarPlugin';
@@ -13,6 +14,7 @@ class PluginRegistry {
 
   constructor() {
     this.registerPlugin(BookmarksPlugin);
+    this.registerPlugin(NextcloudBookmarksPlugin);
     this.registerPlugin(YoutrackPlugin);
     this.registerPlugin(TasktrovePlugin);
     this.registerPlugin(MeteoPlugin);

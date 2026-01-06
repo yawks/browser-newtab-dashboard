@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { TasktroveConfig, TasktroveLabel, TasktroveProject, TasktroveStatusFilter } from './types';
 import { X, Calendar, TrendingUp, Check, ChevronDown, Folder, Tag } from 'lucide-react';
 import { fetchTasktroveLabels, fetchTasktroveProjects } from './api';
+import { CacheDurationField } from '@/components/CacheDurationField';
 
 interface TasktroveConfigModalProps {
   config: TasktroveConfig;
@@ -28,6 +29,7 @@ export function TasktroveConfigModal({
   const [showStatusPopover, setShowStatusPopover] = useState(false);
   const [showProjectsPopover, setShowProjectsPopover] = useState(false);
   const [showLabelsPopover, setShowLabelsPopover] = useState(false);
+  const [cacheDuration, setCacheDuration] = useState<number>(config?.cacheDuration ?? 3600);
 
   // Load projects and labels when API credentials are available
   useEffect(() => {
@@ -87,6 +89,7 @@ export function TasktroveConfigModal({
       statusFilter: statusFilter || undefined,
       projectIds: selectedProjectIds.length > 0 ? selectedProjectIds : undefined,
       labelIds: selectedLabelIds.length > 0 ? selectedLabelIds : undefined,
+      cacheDuration,
     };
 
     onSave(newConfig);
@@ -407,6 +410,11 @@ export function TasktroveConfigModal({
               </div>
             </div>
           </div>
+
+          <CacheDurationField
+            value={cacheDuration}
+            onChange={setCacheDuration}
+          />
 
           <div className="flex gap-2 justify-end pt-2">
             <button

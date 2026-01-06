@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { GoogleCalendarConfig, GoogleCalendarEvent } from './types';
 import { getDaysForPeriod, getMonthGrid } from './utils';
 import { useAutoScroll, useCalendarEvents } from './hooks';
@@ -10,7 +10,7 @@ import { PluginComponentProps } from '@/types/plugin';
 import { Timeline } from './Timeline';
 import { groupEventsByDay } from './api';
 
-export function GoogleCalendarDashboardView({ config, debugEvents }: PluginComponentProps & { debugEvents?: GoogleCalendarEvent[] }) {
+export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: PluginComponentProps & { debugEvents?: GoogleCalendarEvent[] }) {
   const googleCalendarConfig: GoogleCalendarConfig = {
     authType: (config as unknown as GoogleCalendarConfig)?.authType,
     accessToken: (config as unknown as GoogleCalendarConfig)?.accessToken,
@@ -19,14 +19,14 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
     period: (config as unknown as GoogleCalendarConfig)?.period || '1-day',
     userEmail: (config as unknown as GoogleCalendarConfig)?.userEmail,
     weekStart: (config as unknown as GoogleCalendarConfig)?.weekStart || 'monday',
+    cacheDuration: (config as unknown as GoogleCalendarConfig)?.cacheDuration ?? 3600,
   };
 
   // Allow injecting events for debugging (when `debugEvents` is supplied we skip fetching)
-  const hookResult = useCalendarEvents(googleCalendarConfig);
+  const hookResult = useCalendarEvents(googleCalendarConfig, frameId);
   const events = debugEvents ?? hookResult.events;
   const isLoading = debugEvents ? false : hookResult.isLoading;
   const error = debugEvents ? null : hookResult.error;
-  const refresh = debugEvents ? () => { } : hookResult.refresh;
   const [selectedEvent, setSelectedEvent] = useState<GoogleCalendarEvent | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -34,6 +34,16 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
   const eventRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  // Register refresh function for Frame.tsx to call when refresh button is clicked
+  useEffect(() => {
+    if (frameId) {
+      (globalThis as any)[`__pluginRefresh_${frameId}`] = hookResult.refresh;
+      return () => {
+        delete (globalThis as any)[`__pluginRefresh_${frameId}`];
+      };
+    }
+  }, [frameId, hookResult.refresh]);
 
   // Use auto-scroll hook
   useAutoScroll(isLoading, containerRef);
@@ -269,14 +279,6 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
                     <button onClick={handleNext} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronRight className="w-4 h-4" /></button>
                   ) : <div className="w-6 h-6" />}
 
-                  <button
-                    onClick={() => refresh()}
-                    disabled={isLoading}
-                    className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"
-                    title="Refresh events"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                  </button>
                 </div>
                 <div className="grid grid-cols-7 gap-2 mb-3 text-center">
                   {weekdayLabels.map((label, idx) => (
@@ -329,14 +331,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents }: PluginCompo
                 {canGoPrev ? (
                   <button onClick={handlePrev} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronLeft className="w-4 h-4" /></button>
                 ) : <div className="w-6 h-6" />}
-                <button
-                  onClick={() => refresh()}
-                  disabled={isLoading}
-                  className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"
-                  title="Refresh events"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                </button>
+                
                 {canGoNext ? (
                   <button onClick={handleNext} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronRight className="w-4 h-4" /></button>
                 ) : <div className="w-6 h-6" />}

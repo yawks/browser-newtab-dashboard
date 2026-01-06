@@ -15,6 +15,8 @@ export interface PluginComponentProps {
   isEditing: boolean;
   onConfigChange: (config: PluginConfig) => void;
   onExitEditMode: () => void;
+  frameId?: string;
+  onRefresh?: () => void;
 }
 
 export interface Plugin {

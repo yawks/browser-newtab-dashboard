@@ -6,7 +6,7 @@ import { fetchGoogleCalendarEvents } from './api';
 /**
  * Custom hook to fetch and manage calendar events
  */
-export function useCalendarEvents(config: GoogleCalendarConfig) {
+export function useCalendarEvents(config: GoogleCalendarConfig, frameId?: string) {
   const [events, setEvents] = useState<GoogleCalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +14,7 @@ export function useCalendarEvents(config: GoogleCalendarConfig) {
   useEffect(() => {
     const loadEvents = async (forceRefresh: boolean = false) => {
       const authType = config.authType || (config.accessToken ? 'oauth' : 'ical');
-      
+
       // Validate configuration based on auth type
       if (authType === 'oauth') {
         if (!config.accessToken || !config.selectedCalendarIds || config.selectedCalendarIds.length === 0) {
@@ -34,13 +34,13 @@ export function useCalendarEvents(config: GoogleCalendarConfig) {
       setError(null);
 
       try {
-        const fetchedEvents = await fetchGoogleCalendarEvents(config, forceRefresh);
+        const fetchedEvents = await fetchGoogleCalendarEvents(config, forceRefresh, frameId);
         setEvents(fetchedEvents);
         setError(null);
       } catch (err) {
         console.error('Failed to fetch calendar events:', err);
         const errorMessage = err instanceof Error ? err.message : 'Failed to load events.';
-        
+
         // If authentication expired, show a helpful message
         if (errorMessage.includes('Authentication expired') || errorMessage.includes('401')) {
           setError('Authentication expired. Please reconnect to Google Calendar in the settings.');
@@ -63,13 +63,14 @@ export function useCalendarEvents(config: GoogleCalendarConfig) {
     config.selectedCalendarIds?.join(',') || '',
     config.icalUrl,
     config.period,
+    frameId,
   ]);
 
   const refresh = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const fetchedEvents = await fetchGoogleCalendarEvents(config, true);
+      const fetchedEvents = await fetchGoogleCalendarEvents(config, true, frameId);
       setEvents(fetchedEvents);
     } catch (err) {
       console.error('Failed to refresh calendar events:', err);

@@ -3,6 +3,7 @@ import { GoogleCalendar, GoogleCalendarAuthType, GoogleCalendarConfig, GoogleCal
 import { authenticateGoogle, fetchGoogleCalendars, revokeGoogleAuth } from './api';
 import { useEffect, useState } from 'react';
 
+import { CacheDurationField } from '@/components/CacheDurationField';
 import { createPortal } from 'react-dom';
 
 interface GoogleCalendarConfigModalProps {
@@ -37,6 +38,7 @@ export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCal
   const [showAuthTypePopover, setShowAuthTypePopover] = useState(false);
   const [userEmail, setUserEmail] = useState<string>(config?.userEmail || '');
   const [weekStart, setWeekStart] = useState<'monday' | 'sunday'>(config?.weekStart || 'monday');
+  const [cacheDuration, setCacheDuration] = useState<number>(config?.cacheDuration ?? 3600);
 
   // Load calendars when authenticated (OAuth mode only)
   useEffect(() => {
@@ -151,6 +153,7 @@ export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCal
         period,
         userEmail: userEmail.trim() || undefined,
         weekStart,
+        cacheDuration,
       };
 
       onSave(newConfig);
@@ -175,6 +178,7 @@ export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCal
         period,
         userEmail: userEmail.trim() || undefined,
         weekStart,
+        cacheDuration,
       };
 
       onSave(newConfig);
@@ -473,6 +477,11 @@ export function GoogleCalendarConfigModal({ config, onSave, onClose }: GoogleCal
               </label>
             </div>
           </div>
+
+          <CacheDurationField
+            value={cacheDuration}
+            onChange={setCacheDuration}
+          />
 
           <div className="flex gap-2 justify-end pt-2">
             <button

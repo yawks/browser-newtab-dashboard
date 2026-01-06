@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { FinanceConfig, FinanceCurrency, FinancePeriod } from './types';
 import { X, DollarSign, ChevronDown } from 'lucide-react';
+import { CacheDurationField } from '@/components/CacheDurationField';
 
 interface FinanceConfigModalProps {
   config: FinanceConfig;
@@ -33,6 +34,7 @@ export function FinanceConfigModal({ config, onSave, onClose }: FinanceConfigMod
   );
   const [showCurrencyPopover, setShowCurrencyPopover] = useState(false);
   const [showPeriodPopover, setShowPeriodPopover] = useState(false);
+  const [cacheDuration, setCacheDuration] = useState<number>(config?.cacheDuration ?? 3600);
 
   // Close popovers when clicking outside
   useEffect(() => {
@@ -60,6 +62,7 @@ export function FinanceConfigModal({ config, onSave, onClose }: FinanceConfigMod
       period,
       targetAmount7DaysBeforeEndOfMonth:
         targetAmountSevenDays === '' ? undefined : Number(targetAmountSevenDays),
+      cacheDuration,
     };
 
     onSave(newConfig);
@@ -211,6 +214,11 @@ export function FinanceConfigModal({ config, onSave, onClose }: FinanceConfigMod
               Used to compute the goal ratio: amount / (days remaining once only 7 days are left).
             </p>
           </div>
+
+          <CacheDurationField
+            value={cacheDuration}
+            onChange={setCacheDuration}
+          />
 
           <div className="flex gap-2 justify-end pt-2">
             <button

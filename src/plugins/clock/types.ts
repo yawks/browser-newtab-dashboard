@@ -18,6 +18,7 @@ export interface ClockConfig {
   showSunset: boolean;
   latitude?: number; // Required if showSunrise or showSunset is true
   longitude?: number; // Required if showSunrise or showSunset is true
+  cacheDuration?: number;
 }
 
 export interface SunTimes {

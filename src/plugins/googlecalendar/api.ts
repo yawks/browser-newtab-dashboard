@@ -1,4 +1,5 @@
 import { GoogleCalendar, GoogleCalendarConfig, GoogleCalendarEvent, GoogleCalendarEventsResponse } from './types';
+import { loadFromCache, saveToCache } from '@/lib/cache';
 
 // @ts-ignore
 import ICAL from 'ical.js';
@@ -219,216 +220,18 @@ function parseICal(icalText: string): GoogleCalendarEvent[] {
   }
 }
 
-
-
-// Cache configuration
-const ICAL_CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
-const ICAL_CACHE_PREFIX = 'ical_cache_';
-
-// Generate cache key from URL
-function getCacheKey(icalUrl: string): string {
-  // Use a simple hash of the URL as the key
-  let hash = 0;
-  for (let i = 0; i < icalUrl.length; i++) {
-    const char = icalUrl.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return `${ICAL_CACHE_PREFIX}${Math.abs(hash)}`;
-}
-
-// Check if cached events contain events for today
-function hasTodayEvents(events: GoogleCalendarEvent[]): boolean {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart);
-  todayEnd.setHours(23, 59, 59, 999);
-  
-  return events.some((event) => {
-    const startDate = event.start.dateTime 
-      ? new Date(event.start.dateTime)
-      : event.start.date 
-      ? new Date(event.start.date)
-      : null;
-    
-    if (!startDate) return false;
-    
-    const endDate = event.end?.dateTime 
-      ? new Date(event.end.dateTime)
-      : event.end?.date 
-      ? new Date(event.end.date)
-      : startDate;
-    
-    return startDate <= todayEnd && endDate >= todayStart;
-  });
-}
-
-// Load cached iCal events (returns expired cache if it has today's events)
-async function loadCachedICalEvents(icalUrl: string, allowExpired: boolean = false): Promise<{ events: GoogleCalendarEvent[]; expired: boolean } | null> {
-  return new Promise((resolve) => {
-    const cacheKey = getCacheKey(icalUrl);
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get([cacheKey], (result) => {
-        const cached = result[cacheKey];
-        if (!cached) {
-          resolve(null);
-          return;
-        }
-        
-        try {
-          // Handle both string and already parsed objects
-          const data = typeof cached === 'string' ? JSON.parse(cached) : cached;
-          const { events, timestamp } = data;
-          const now = Date.now();
-          const age = now - timestamp;
-          
-          // Check if cache is still valid
-          if (age < ICAL_CACHE_DURATION) {
-            resolve({ events, expired: false });
-          } else {
-            // Cache expired
-            if (allowExpired && hasTodayEvents(events)) {
-              resolve({ events, expired: true });
-            } else {
-              resolve(null);
-            }
-          }
-        } catch (e) {
-          console.error('[iCal Cache] Failed to parse cached iCal data:', e);
-          resolve(null);
-        }
-      });
-    } else {
-      // Fallback to localStorage
-      try {
-        const cached = localStorage.getItem(cacheKey);
-        if (!cached) {
-          resolve(null);
-          return;
-        }
-        
-        const { events, timestamp } = JSON.parse(cached);
-        const now = Date.now();
-        const age = now - timestamp;
-        
-        if (age < ICAL_CACHE_DURATION) {
-          resolve({ events, expired: false });
-        } else {
-          // Cache expired
-          if (allowExpired && hasTodayEvents(events)) {
-            resolve({ events, expired: true });
-          } else {
-            resolve(null);
-          }
-        }
-      } catch (e) {
-        console.error('[iCal Cache] Failed to load cached iCal data:', e);
-        resolve(null);
-      }
-    }
-  });
-}
-
-// Save iCal events to cache
-async function saveCachedICalEvents(icalUrl: string, events: GoogleCalendarEvent[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const cacheKey = getCacheKey(icalUrl);
-    const cacheData = {
-      events,
-      timestamp: Date.now(),
-    };
-    
-    // console.log('[ICal Cache] Saving events to cache. Count:', events.length);
-    
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({ [cacheKey]: JSON.stringify(cacheData) }, () => {
-        if (chrome.runtime.lastError) {
-          console.error('[iCal Cache] Failed to save to chrome.storage:', chrome.runtime.lastError.message);
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    } else {
-      // Fallback to localStorage
-      try {
-        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-        resolve();
-      } catch (e) {
-        console.error('[iCal Cache] Failed to save cached iCal data to localStorage:', e);
-        reject(e);
-      }
-    }
-  });
-}
-
-// Refresh iCal cache in background (called when using stale cache)
-async function refreshICalCache(icalUrl: string): Promise<void> {
-  try {
-    // Add cache busting to force refresh
-    const url = new URL(icalUrl);
-    url.searchParams.set('_t', Date.now().toString());
-
-    // console.log('[ICal Cache] Background refreshing from:', url.toString());
-
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Accept': 'text/calendar, text/plain, */*',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      },
-      cache: 'reload',
-    });
-    
-    if (!response.ok) {
-      console.warn(`[iCal Cache] Background refresh failed: ${response.status} ${response.statusText}`);
-      return;
-    }
-    
-    const icalText = await response.text();
-    
-    if (!icalText || icalText.trim().length === 0) {
-      console.warn('[iCal Cache] Background refresh returned empty response');
-      return;
-    }
-    
-    // Check if it looks like an iCal file
-    if (!icalText.includes('BEGIN:VCALENDAR') && !icalText.includes('BEGIN:VEVENT')) {
-      console.warn('[iCal Cache] Background refresh returned invalid iCal format');
-      return;
-    }
-    
-    const allEvents = parseICal(icalText);
-    
-    // Filter to keep only future events and today's events for cache
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    // Keep events from the last 90 days to ensure current month history is available
-    const cutoffDate = new Date(todayStart);
-    cutoffDate.setDate(cutoffDate.getDate() - 90);
-    const cacheCutoff = cutoffDate.getTime();
-    
-    const eventsToCache = allEvents.filter((event) => {
-      const eventEnd = event.end?.dateTime || event.end?.date;
-      if (!eventEnd) return false;
-      
-      const endDate = new Date(eventEnd);
-      return endDate.getTime() >= cacheCutoff;
-    });
-    
-    await saveCachedICalEvents(icalUrl, eventsToCache);
-  } catch (error) {
-    console.error('[iCal Cache] Background refresh error:', error);
-  }
-}
-
 // Parse iCal datetime format (YYYYMMDDTHHmmss or YYYYMMDDTHHmmssZ)
 // If tzid is provided, treat as local time in that timezone; otherwise treat as UTC if Z suffix
 
 
-// Fetch events from iCal URL (background refresh if using stale cache)
-async function fetchICalEvents(icalUrl: string, period: string, forceRefresh: boolean = false): Promise<GoogleCalendarEvent[]> {
+// Fetch events from iCal URL (with generic cache support)
+async function fetchICalEvents(
+  icalUrl: string,
+  period: string,
+  forceRefresh: boolean = false,
+  frameId?: string,
+  cacheDuration?: number
+): Promise<GoogleCalendarEvent[]> {
   const log = (msg: string, ...args: any[]) => console.log(`[iCal Fetch] ${msg}`, ...args);
   log('Starting fetch. Period:', period, 'ForceRefresh:', forceRefresh);
 
@@ -440,58 +243,44 @@ async function fetchICalEvents(icalUrl: string, period: string, forceRefresh: bo
       throw new Error('Invalid iCal URL format. Please check the URL and try again.');
     }
 
-    // Try to load from cache first (allow expired cache if it has today's events)
-    // If forceRefresh is true, skip cache lookup
-    let cachedResult = null;
-    if (!forceRefresh) {
-      cachedResult = await loadCachedICalEvents(icalUrl, true);
-      log('Cache lookup result:', !!cachedResult);
-    } else {
-      log('Skipping cache due to forceRefresh');
+    // Try to load from generic cache first if frameId is provided
+    let cachedEvents: GoogleCalendarEvent[] | null = null;
+    if (!forceRefresh && frameId && cacheDuration) {
+      cachedEvents = await loadFromCache<GoogleCalendarEvent[]>(frameId, cacheDuration);
+      log('Generic cache lookup result:', !!cachedEvents);
     }
-    
-    if (cachedResult) {
-      const { events: cachedEvents, expired } = cachedResult;
-      
+
+    if (cachedEvents) {
       // Filter cached events by period
       const { timeMin, timeMax } = getDateRange(period);
       const timeMinDate = new Date(timeMin);
       const timeMaxDate = new Date(timeMax);
-      
+
       const filteredEvents = cachedEvents.filter((event) => {
-        const startDate = event.start.dateTime 
+        const startDate = event.start.dateTime
           ? new Date(event.start.dateTime)
-          : event.start.date 
+          : event.start.date
           ? new Date(event.start.date)
           : null;
-        
+
         if (!startDate) return false;
-        
-        const endDate = event.end?.dateTime 
+
+        const endDate = event.end?.dateTime
           ? new Date(event.end.dateTime)
-          : event.end?.date 
+          : event.end?.date
           ? new Date(event.end.date)
           : startDate;
-        
+
         return startDate <= timeMaxDate && endDate >= timeMinDate;
       });
-      
+
       // Sort by start time
       filteredEvents.sort((a, b) => {
         const aStart = a.start.dateTime || a.start.date || '';
         const bStart = b.start.dateTime || b.start.date || '';
         return aStart.localeCompare(bStart);
       });
-      
-      // If cache is expired, refresh in background
-      if (expired) {
-        log('Cache expired, triggering background refresh');
-        // Don't await - refresh in background
-        refreshICalCache(icalUrl).catch((err: unknown) => {
-          console.error('[iCal Cache] Background refresh failed:', err);
-        });
-      }
-      
+
       return filteredEvents;
     }
 
@@ -564,8 +353,10 @@ async function fetchICalEvents(icalUrl: string, period: string, forceRefresh: bo
       return endDate.getTime() >= cacheCutoff;
     });
     
-    // Save to cache (save only future/today events to reduce storage size)
-    await saveCachedICalEvents(icalUrl, eventsToCache);
+    // Save to generic cache if frameId is provided
+    if (frameId) {
+      await saveToCache(frameId, eventsToCache);
+    }
     
     // Filter events by period
     const { timeMin, timeMax } = getDateRange(period);
@@ -888,16 +679,17 @@ function getDateRange(period: string): { timeMin: string; timeMax: string } {
 // Fetch events for selected calendars with automatic token refresh
 export async function fetchGoogleCalendarEvents(
   config: GoogleCalendarConfig,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  frameId?: string
 ): Promise<GoogleCalendarEvent[]> {
   const authType = config.authType || (config.accessToken ? 'oauth' : 'ical');
-  
+
   // Handle iCal URL
   if (authType === 'ical') {
     if (!config.icalUrl) {
       return [];
     }
-    return fetchICalEvents(config.icalUrl, config.period, forceRefresh);
+    return fetchICalEvents(config.icalUrl, config.period, forceRefresh, frameId, config.cacheDuration);
   }
   
   // Handle OAuth

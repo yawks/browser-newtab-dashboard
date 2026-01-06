@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { YoutrackConfig } from './types';
 import { X } from 'lucide-react';
+import { CacheDurationField } from '@/components/CacheDurationField';
 
 interface YoutrackConfigModalProps {
   config: YoutrackConfig;
@@ -22,6 +23,7 @@ export function YoutrackConfigModal({
   const [authorizationHeader, setAuthorizationHeader] = useState(config?.authorizationHeader || '');
   const [issueFields, setIssueFields] = useState(config?.issueFields || DEFAULT_ISSUE_FIELDS);
   const [query, setQuery] = useState(config?.query || DEFAULT_QUERY);
+  const [cacheDuration, setCacheDuration] = useState<number>(config?.cacheDuration ?? 3600);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +34,7 @@ export function YoutrackConfigModal({
       authorizationHeader: authorizationHeader.trim(),
       issueFields: issueFields.trim() || DEFAULT_ISSUE_FIELDS,
       query: query.trim() || DEFAULT_QUERY,
+      cacheDuration,
     };
 
     onSave(newConfig);
@@ -140,6 +143,11 @@ export function YoutrackConfigModal({
               Youtrack query to filter issues (e.g., "#Unresolved", "Assignee: mat #Unresolved")
             </p>
           </div>
+
+          <CacheDurationField
+            value={cacheDuration}
+            onChange={setCacheDuration}
+          />
 
           <div className="flex gap-2 justify-end pt-2">
             <button

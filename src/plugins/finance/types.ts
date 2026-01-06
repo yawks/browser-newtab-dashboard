@@ -8,6 +8,7 @@ export interface FinanceConfig {
   currency: FinanceCurrency;
   period: FinancePeriod;
   targetAmount7DaysBeforeEndOfMonth?: number;
+  cacheDuration?: number;
 }
 
 export interface FinanceSummaryItem {

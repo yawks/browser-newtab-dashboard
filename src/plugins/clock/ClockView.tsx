@@ -203,9 +203,10 @@ function AnalogClock({
 
 interface ClockViewProps {
   clockConfig: ClockConfig;
+  frameId?: string;
 }
 
-export function ClockView({clockConfig}: ClockViewProps) {
+export function ClockView({clockConfig, frameId}: ClockViewProps) {
     const [currentTime, setCurrentTime] = useState<Date>(new Date());
     const [sunTimes, setSunTimes] = useState<SunTimes | null>(null);
     const [isLoadingSun, setIsLoadingSun] = useState(false);
@@ -261,8 +262,8 @@ export function ClockView({clockConfig}: ClockViewProps) {
       if ((clockConfig.showSunrise || clockConfig.showSunset) && clockConfig.latitude && clockConfig.longitude) {
         setIsLoadingSun(true);
         setSunError(null);
-        
-        fetchSunTimes(clockConfig.latitude, clockConfig.longitude)
+
+        fetchSunTimes(clockConfig.latitude, clockConfig.longitude, frameId, clockConfig.cacheDuration)
           .then((times) => {
             setSunTimes(times);
             setIsLoadingSun(false);
@@ -275,7 +276,7 @@ export function ClockView({clockConfig}: ClockViewProps) {
       } else {
         setSunTimes(null);
       }
-    }, [clockConfig.showSunrise, clockConfig.showSunset, clockConfig.latitude, clockConfig.longitude]);
+    }, [clockConfig.showSunrise, clockConfig.showSunset, clockConfig.latitude, clockConfig.longitude, frameId, clockConfig.cacheDuration]);
 
     // Format sun time for display
     const formatSunTime = (isoString: string): string => {

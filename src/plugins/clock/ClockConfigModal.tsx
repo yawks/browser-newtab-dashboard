@@ -1,6 +1,7 @@
 import { ChevronDown, Clock, X } from 'lucide-react';
 import { ClockConfig, ClockFormat, ClockTheme } from './types';
 
+import { CacheDurationField } from '@/components/CacheDurationField';
 import { createPortal } from 'react-dom';
 import { getSystemTimezone } from './api';
 import { useState } from 'react';
@@ -52,6 +53,7 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
   const [showThemePopover, setShowThemePopover] = useState(false);
   const [showTimezonePopover, setShowTimezonePopover] = useState(false);
   const [customTimezone, setCustomTimezone] = useState<string>('');
+  const [cacheDuration, setCacheDuration] = useState<number>(config?.cacheDuration ?? 3600);
 
   const systemTimezone = getSystemTimezone();
 
@@ -98,6 +100,7 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
       showSunset,
       latitude: validation.lat,
       longitude: validation.lng,
+      cacheDuration,
     });
   };
 
@@ -372,6 +375,11 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
               </div>
             )}
           </div>
+
+          <CacheDurationField
+            value={cacheDuration}
+            onChange={setCacheDuration}
+          />
 
           <div className="flex gap-2 justify-end pt-2">
             <button

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { MeteoConfig, MeteoCitySuggestion, MeteoProvider } from './types';
 import { searchCities } from './api';
 import { X, CloudSun, ChevronDown } from 'lucide-react';
+import { CacheDurationField } from '@/components/CacheDurationField';
 
 const PROVIDERS: { id: MeteoProvider; label: string }[] = [
   { id: 'openweather', label: 'OpenWeatherMap' },
@@ -32,6 +33,7 @@ export function MeteoConfigModal({ config, onSave, onClose }: MeteoConfigModalPr
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showProviderPopover, setShowProviderPopover] = useState(false);
+  const [cacheDuration, setCacheDuration] = useState<number>(config.cacheDuration ?? 3600);
 
   useEffect(() => {
     if (!cityQuery || cityQuery.length < 2 || !apiKey) {
@@ -86,6 +88,7 @@ export function MeteoConfigModal({ config, onSave, onClose }: MeteoConfigModalPr
       country: selectedCity.country,
       latitude: selectedCity.lat,
       longitude: selectedCity.lon,
+      cacheDuration,
     });
   };
 
@@ -202,6 +205,11 @@ export function MeteoConfigModal({ config, onSave, onClose }: MeteoConfigModalPr
               </p>
             )}
           </div>
+
+          <CacheDurationField
+            value={cacheDuration}
+            onChange={setCacheDuration}
+          />
 
           <div className="flex gap-2 justify-end pt-2">
             <button

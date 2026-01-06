@@ -1,8 +1,9 @@
-import { Eye, EyeOff, Pencil, Settings, X } from 'lucide-react';
+import { Eye, EyeOff, Pencil, RefreshCw, Settings, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { FrameData } from '@/lib/storage';
 import { pluginRegistry } from '@/lib/plugin-registry';
+import { clearCache } from '@/lib/cache';
 
 interface FrameProps {
   frame: FrameData;
@@ -17,6 +18,7 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
   const [isHovered, setIsHovered] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [frameName, setFrameName] = useState(frame.name || '');
+  const [refreshKey, setRefreshKey] = useState(0);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const plugin = pluginRegistry.getPlugin(frame.pluginId);
 
@@ -89,6 +91,24 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
     onNsfwToggle(frame.id, !frame.isNsfw);
   };
 
+  const handleRefreshClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Clear the cache for this frame
+    await clearCache(frame.id);
+
+    // Call the plugin's onRefresh callback if it exists
+    // This will trigger the plugin to force reload its data
+    const refreshCallback = (globalThis as any)[`__pluginRefresh_${frame.id}`];
+    if (refreshCallback) {
+      await refreshCallback();
+    }
+
+    // Trigger a refresh by incrementing the refresh key
+    setRefreshKey(prev => prev + 1);
+  };
+
   const ViewComponent = isEditing ? plugin.EditView : plugin.DashboardView;
 
   return (
@@ -135,6 +155,18 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
           )}
         </div>
         <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
+          <button
+            onClick={handleRefreshClick}
+            onMouseDown={(e) => e.stopPropagation()}
+            className={`p-1 rounded hover:bg-accent transition-colors ${
+              isHovered || isEditing ? 'opacity-100' : 'opacity-0'
+            }`}
+            title="Refresh widget data"
+            type="button"
+            disabled={frame.isNsfw}
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
           <button
             onClick={handleNsfwClick}
             onMouseDown={(e) => e.stopPropagation()}
@@ -200,10 +232,13 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
           </div>
         ) : (
           <ViewComponent
+            key={refreshKey}
             config={frame.config}
             isEditing={isEditing}
             onConfigChange={handleConfigChange}
             onExitEditMode={handleExitEditMode}
+            frameId={frame.id}
+            onRefresh={() => setRefreshKey(prev => prev + 1)}
           />
         )}
       </div>

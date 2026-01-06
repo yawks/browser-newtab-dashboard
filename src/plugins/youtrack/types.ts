@@ -4,6 +4,7 @@ export interface YoutrackConfig {
   authorizationHeader: string;
   issueFields: string;
   query: string;
+  cacheDuration?: number;
 }
 
 export interface YoutrackIssue {

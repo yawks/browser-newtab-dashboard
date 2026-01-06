@@ -4,7 +4,7 @@ import {ClockView} from './ClockView';
 
 import { PluginComponentProps } from '@/types/plugin';
 
-export function ClockDashboardView({ config }: PluginComponentProps) {
+export function ClockDashboardView({ config, frameId }: PluginComponentProps) {
   const clockConfig: ClockConfig = {
     theme: 'digital-simple',
     showDate: true,
@@ -12,8 +12,9 @@ export function ClockDashboardView({ config }: PluginComponentProps) {
     showSunrise: false,
     showSunset: false,
     ...(config as unknown as Partial<ClockConfig>),
+    cacheDuration: (config as unknown as ClockConfig)?.cacheDuration ?? 3600,
   };
-  return <ClockView clockConfig={clockConfig}/>
+  return <ClockView clockConfig={clockConfig} frameId={frameId}/>
 }
 
 
