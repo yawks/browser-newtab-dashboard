@@ -8,6 +8,7 @@ import { GoogleCalendarPlugin } from '@/plugins/googlecalendar/GoogleCalendarPlu
 import { MeteoPlugin } from '@/plugins/meteo/MeteoPlugin';
 import { TasktrovePlugin } from '@/plugins/tasktrove/TasktrovePlugin';
 import { YoutrackPlugin } from '@/plugins/youtrack/YoutrackPlugin';
+import { LiteFeedPlugin } from '@/plugins/lite-feed/LiteFeedPlugin';
 
 class PluginRegistry {
   private plugins: Map<string, Plugin> = new Map();
@@ -21,6 +22,7 @@ class PluginRegistry {
     this.registerPlugin(FinancePlugin);
     this.registerPlugin(GoogleCalendarPlugin);
     this.registerPlugin(ClockPlugin);
+    this.registerPlugin(LiteFeedPlugin);
   }
 
   registerPlugin(plugin: Plugin): void {

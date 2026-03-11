@@ -125,7 +125,26 @@ Display financial summary and net worth from [Firefly](https://github.com/firefl
 - Currency: Select EUR or USD
 - Period: Choose time period for the summary
 
-### 6. Clock
+### 6. Lite Feed
+
+Display events from a [lite-feed-server](https://github.com/yawks/lite-feed-server) instance.
+
+**Features:**
+- Single-event view (when max results = 1): large image, title, full timestamp, and HTML description
+- List view (when max results > 1): thumbnail, title, type badge with color coding, relative timestamps ("x minutes ago")
+- Image support: base64-encoded images or external image URLs
+- Type filtering and exclusion
+- Auto-refresh every 5 minutes
+
+**Configuration:**
+- Server URL: Your lite-feed-server base URL
+- API Key: Authentication key (sent as `X-API-Key` header)
+- Status filter: Show only `READ` or `UNREAD` events (optional, default: all)
+- Type: Only show events of this type (optional)
+- Exclude Type: Comma-separated list of types to exclude (optional)
+- Max Results: Number of events to fetch, 1–500 (set to 1 for detailed single-event view)
+
+### 7. Clock
 
 Display a configurable clock with analog and digital themes.
 
@@ -281,7 +300,8 @@ src/
 │   ├── youtrack/
 │   ├── tasktrove/
 │   ├── meteo/
-│   └── finance/
+│   ├── finance/
+│   └── lite-feed/
 ├── lib/                # Utilities
 │   ├── storage.ts
 │   └── plugin-registry.ts
