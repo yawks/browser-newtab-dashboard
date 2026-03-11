@@ -25,17 +25,17 @@ export interface FrameData {
 const STORAGE_KEY = 'dashboard_data';
 const THEME_KEY = 'dashboard_theme';
 
-export type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark' | 'system';
 
 export async function loadTheme(): Promise<Theme> {
   return new Promise((resolve) => {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       chrome.storage.local.get([THEME_KEY], (result) => {
-        resolve((result[THEME_KEY] as Theme) || 'light');
+        resolve((result[THEME_KEY] as Theme) || 'system');
       });
     } else {
       const theme = localStorage.getItem(THEME_KEY);
-      resolve((theme as Theme) || 'light');
+      resolve((theme as Theme) || 'system');
     }
   });
 }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Settings, Plus, Moon, Sun, Download, Upload, FolderPlus, Trash2, Pencil } from 'lucide-react';
+import { Settings, Plus, Moon, Sun, Monitor, Download, Upload, FolderPlus, Trash2, Pencil } from 'lucide-react';
 import { loadTheme, saveTheme, type Theme, type SpaceData, createSpace, loadDashboardData, renameSpace } from '../lib/storage';
 
 interface SettingsMenuProps {
@@ -29,7 +29,7 @@ export function SettingsMenu({ onAddWidget, onExport, onImport, spaces = [], onS
   }, []);
 
   function applyTheme(newTheme: Theme) {
-    if (newTheme === 'dark') {
+    if (newTheme === 'dark' || (newTheme === 'system' && globalThis.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
@@ -37,11 +37,20 @@ export function SettingsMenu({ onAddWidget, onExport, onImport, spaces = [], onS
   }
 
   function toggleTheme() {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
+    const cycle: Theme[] = ['light', 'dark', 'system'];
+    const newTheme = cycle[(cycle.indexOf(theme) + 1) % cycle.length];
     setTheme(newTheme);
     applyTheme(newTheme);
     saveTheme(newTheme);
   }
+
+  useEffect(() => {
+    if (theme !== 'system') return;
+    const mediaQuery = globalThis.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => applyTheme('system');
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, [theme]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -127,6 +136,11 @@ export function SettingsMenu({ onAddWidget, onExport, onImport, spaces = [], onS
     }
   }, [editingSpaceId]);
 
+  const themeLabels: Record<string, string> = { light: 'Light Mode', dark: 'Dark Mode', system: 'System Mode' };
+  const themeBadges: Record<string, string> = { light: 'Light', dark: 'Dark', system: 'Auto' };
+  const themeLabel = themeLabels[theme];
+  const themeBadge = themeBadges[theme];
+
   return (
     <div className="relative" ref={menuRef}>
       <button
@@ -168,11 +182,13 @@ export function SettingsMenu({ onAddWidget, onExport, onImport, spaces = [], onS
                   className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent transition-colors text-left"
                 >
                   <span className="flex items-center gap-2">
-                    {theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                    {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+                    {theme === 'dark' && <Moon className="w-4 h-4" />}
+                    {theme === 'system' && <Monitor className="w-4 h-4" />}
+                    {theme === 'light' && <Sun className="w-4 h-4" />}
+                    {themeLabel}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {theme === 'dark' ? 'On' : 'Off'}
+                    {themeBadge}
                   </span>
                 </button>
                 <div className="border-t border-border my-1"></div>
