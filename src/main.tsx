@@ -16,11 +16,11 @@ function initApp() {
     return;
   }
 
-  // Debug entrypoint: append ?debug=gc to the URL to render the GoogleCalendar view directly
+  // Debug entrypoint: append ?debug=gc to the URL to render the Calendar view directly
   if (typeof window !== 'undefined' && window.location.search.includes('debug=gc')) {
-    import('./plugins/googlecalendar/GoogleCalendarDashboardView').then(({ GoogleCalendarDashboardView }) => {
-      console.log('Debug: rendering GoogleCalendarDashboardView with mock events');
-      const config = { period: 'week', authType: 'ical', icalUrl: '', weekStart: 'monday' };
+    import('./plugins/calendar/CalendarDashboardView').then(({ CalendarDashboardView }) => {
+      console.log('Debug: rendering CalendarDashboardView with mock events');
+      const config = { sources: [], period: 'week', weekStart: 'monday' };
 
       // Mock events to reproduce interactive behavior (one timed event today)
       const now = new Date();
@@ -38,7 +38,7 @@ function initApp() {
       ReactDOM.createRoot(rootElement).render(
         <React.StrictMode>
           <div style={{ height: '100vh' }}>
-            <GoogleCalendarDashboardView
+            <CalendarDashboardView
               config={config as any}
               debugEvents={mockEvents as any}
               isEditing={false}
@@ -49,7 +49,7 @@ function initApp() {
         </React.StrictMode>
       );
     }).catch((err) => {
-      console.error('Failed to load GoogleCalendar debug view', err);
+      console.error('Failed to load Calendar debug view', err);
       ReactDOM.createRoot(rootElement).render(
         <React.StrictMode>
           <App />

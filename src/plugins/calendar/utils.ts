@@ -1,4 +1,4 @@
-import { GoogleCalendarEvent } from './types';
+import { CalendarEvent } from './types';
 
 /**
  * Format time from ISO string or date string
@@ -63,7 +63,7 @@ export function getStatusIcon(status?: string) {
 /**
  * Calculate event position and height based on time
  */
-export function getEventPosition(event: GoogleCalendarEvent): { top: number; height: number } | null {
+export function getEventPosition(event: CalendarEvent): { top: number; height: number } | null {
   if (!event.start.dateTime || !event.end?.dateTime) {
     return null; // All-day events or events without time
   }
@@ -85,7 +85,7 @@ export function getEventPosition(event: GoogleCalendarEvent): { top: number; hei
 /**
  * Check if two events overlap
  */
-export function eventsOverlap(event1: GoogleCalendarEvent, event2: GoogleCalendarEvent): boolean {
+export function eventsOverlap(event1: CalendarEvent, event2: CalendarEvent): boolean {
   if (!event1.start.dateTime || !event1.end?.dateTime || !event2.start.dateTime || !event2.end?.dateTime) {
     return false;
   }
@@ -98,115 +98,95 @@ export function eventsOverlap(event1: GoogleCalendarEvent, event2: GoogleCalenda
   return start1 < end2 && start2 < end1;
 }
 
+export type EventSegment = {
+  top: number;
+  height: number;
+  left: number;
+  width: number;
+};
+
 /**
- * Calculate layout for overlapping events (like Google Calendar)
+ * Calculate layout for overlapping events.
+ *
+ * Each event gets a fixed column for its entire duration (never split into
+ * multiple segments). Columns are assigned greedily by start time; width is
+ * determined by the highest column index among all directly-overlapping events.
  */
-export function calculateEventLayout(events: GoogleCalendarEvent[]): Map<string, { left: number; width: number }> {
-  const layout = new Map<string, { left: number; width: number }>();
-  
-  if (events.length === 0) return layout;
-      
+export function calculateEventLayout(events: CalendarEvent[]): Map<string, EventSegment[]> {
+  const result = new Map<string, EventSegment[]>();
+
+  if (events.length === 0) return result;
+
   const timedEvents = events.filter(e => e.start.dateTime && e.end?.dateTime);
-  
-  if (timedEvents.length === 0) return layout;
-  
-  // Build overlap graph
-  const overlaps: Map<string, Set<string>> = new Map();
-  timedEvents.forEach(event => {
-    overlaps.set(event.id, new Set());
+  if (timedEvents.length === 0) return result;
+
+  timedEvents.forEach(e => result.set(e.id, []));
+
+  const spacingPercent = 2;
+  const verticalSpacing = 4;
+
+  // Sort by start time, then longer events first
+  const sorted = [...timedEvents].sort((a, b) => {
+    const startDiff = new Date(a.start.dateTime!).getTime() - new Date(b.start.dateTime!).getTime();
+    if (startDiff !== 0) return startDiff;
+    const durA = new Date(a.end!.dateTime!).getTime() - new Date(a.start.dateTime!).getTime();
+    const durB = new Date(b.end!.dateTime!).getTime() - new Date(b.start.dateTime!).getTime();
+    return durB - durA;
   });
-  
-  for (let i = 0; i < timedEvents.length; i++) {
-    for (let j = i + 1; j < timedEvents.length; j++) {
-      if (eventsOverlap(timedEvents[i], timedEvents[j])) {
-        overlaps.get(timedEvents[i].id)!.add(timedEvents[j].id);
-        overlaps.get(timedEvents[j].id)!.add(timedEvents[i].id);
-      }
-    }
+
+  // Greedy column assignment: each event goes in the first column that is free
+  const eventCol = new Map<string, number>();
+  const colEndTimes: number[] = [];
+
+  for (const event of sorted) {
+    const start = new Date(event.start.dateTime!).getTime();
+    const end = new Date(event.end!.dateTime!).getTime();
+    let col = 0;
+    while (col < colEndTimes.length && colEndTimes[col] > start) col++;
+    eventCol.set(event.id, col);
+    colEndTimes[col] = end;
   }
-  
-  // Find connected components (groups of overlapping events)
-  const visited = new Set<string>();
-  const components: string[][] = [];
-  
-  const dfs = (eventId: string, component: string[]) => {
-    if (visited.has(eventId)) return;
-    visited.add(eventId);
-    component.push(eventId);
-    
-    const neighbors = overlaps.get(eventId) || new Set();
-    neighbors.forEach(neighborId => {
-      if (!visited.has(neighborId)) {
-        dfs(neighborId, component);
-      }
+
+  // For each event, find the number of columns needed across its overlap group
+  for (const event of timedEvents) {
+    const eStart = new Date(event.start.dateTime!).getTime();
+    const eEnd = new Date(event.end!.dateTime!).getTime();
+    const col = eventCol.get(event.id)!;
+
+    const overlapping = timedEvents.filter(e => {
+      if (e.id === event.id) return false;
+      const s = new Date(e.start.dateTime!).getTime();
+      const en = new Date(e.end!.dateTime!).getTime();
+      return s < eEnd && en > eStart;
     });
-  };
-  
-  timedEvents.forEach(event => {
-    if (!visited.has(event.id)) {
-      const component: string[] = [];
-      dfs(event.id, component);
-      if (component.length > 0) {
-        components.push(component);
-      }
-    }
-  });
-  
-  // For each component, calculate column assignments
-  components.forEach(component => {
-    const sortedEvents = component
-      .map(id => timedEvents.find(e => e.id === id)!)
-      .sort((a, b) => {
-        const startA = new Date(a.start.dateTime!).getTime();
-        const startB = new Date(b.start.dateTime!).getTime();
-        return startA - startB;
-      });
-    
-    const columns: Map<string, number> = new Map();
-    const eventEnds: Map<number, number> = new Map();
-    
-    sortedEvents.forEach(event => {
-      const eventStartTime = new Date(event.start.dateTime!).getTime();
-      const eventEndTime = new Date(event.end!.dateTime!).getTime();
-      
-      let column = 0;
-      while (eventEnds.has(column) && eventEnds.get(column)! > eventStartTime) {
-        column++;
-      }
-      
-      columns.set(event.id, column);
-      eventEnds.set(column, eventEndTime);
-    });
-    
-    const maxColumns = Math.max(...Array.from(columns.values())) + 1;
-    const spacingPercent = 4;
-    const totalSpacingPercent = spacingPercent * (maxColumns - 1);
-    const availableWidth = 100 - totalSpacingPercent;
-    const eventWidth = availableWidth / maxColumns;
-    
-    sortedEvents.forEach(event => {
-      const column = columns.get(event.id)!;
-      const left = column * (eventWidth + spacingPercent);
-      const width = eventWidth;
-      
-      layout.set(event.id, { left, width });
-    });
-  });
-  
-  // Events without overlaps get full width
-  timedEvents.forEach(event => {
-    if (!layout.has(event.id)) {
-      layout.set(event.id, { left: 0, width: 100 });
-    }
-  });
-  
-  return layout;
+
+    const numCols = overlapping.length === 0
+      ? 1
+      : Math.max(col, ...overlapping.map(e => eventCol.get(e.id)!)) + 1;
+
+    const eventWidth = numCols === 1 ? 100 : (100 - spacingPercent * (numCols - 1)) / numCols;
+    const left = numCols === 1 ? 0 : col * (eventWidth + spacingPercent);
+
+    const startDate = new Date(event.start.dateTime!);
+    const endDate = new Date(event.end!.dateTime!);
+    const topPx = startDate.getHours() * 60 + startDate.getMinutes();
+    const heightPx = endDate.getHours() * 60 + endDate.getMinutes() - topPx;
+
+    result.set(event.id, [{
+      top: topPx,
+      height: Math.max(heightPx - verticalSpacing, 1),
+      left,
+      width: eventWidth,
+    }]);
+  }
+
+  return result;
 }
 
 /**
  * Check if an event is in the past
  */
-export function isEventPast(event: GoogleCalendarEvent): boolean {
+export function isEventPast(event: CalendarEvent): boolean {
   const now = new Date();
   const eventEnd = event.end?.dateTime || event.end?.date;
   if (!eventEnd) return false;
@@ -219,7 +199,7 @@ export function isEventPast(event: GoogleCalendarEvent): boolean {
  * Get user's response status for an event
  */
 export function getUserResponseStatus(
-  event: GoogleCalendarEvent,
+  event: CalendarEvent,
   userEmail?: string
 ): 'ACCEPTED' | 'DECLINED' | 'TENTATIVE' | 'NEEDS-ACTION' | null {
   if (!event.attendees || event.attendees.length === 0) {
@@ -247,7 +227,7 @@ export function getUserResponseStatus(
 /**
  * Find the current or next event (excluding all-day events)
  */
-export function findCurrentEvent(events: GoogleCalendarEvent[]): GoogleCalendarEvent | null {
+export function findCurrentEvent(events: CalendarEvent[]): CalendarEvent | null {
   const now = new Date();
   
   for (const event of events) {

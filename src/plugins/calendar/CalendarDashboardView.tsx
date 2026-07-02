@@ -1,5 +1,5 @@
 import { AlertCircle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { GoogleCalendarConfig, GoogleCalendarEvent } from './types';
+import { CalendarConfig, CalendarEvent, migrateConfig } from './types';
 import { getDaysForPeriod, getMonthGrid } from './utils';
 import { useAutoScroll, useCalendarEvents } from './hooks';
 import { useEffect, useRef, useState } from 'react';
@@ -10,24 +10,14 @@ import { PluginComponentProps } from '@/types/plugin';
 import { Timeline } from './Timeline';
 import { groupEventsByDay } from './api';
 
-export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: PluginComponentProps & { debugEvents?: GoogleCalendarEvent[] }) {
-  const googleCalendarConfig: GoogleCalendarConfig = {
-    authType: (config as unknown as GoogleCalendarConfig)?.authType,
-    accessToken: (config as unknown as GoogleCalendarConfig)?.accessToken,
-    selectedCalendarIds: (config as unknown as GoogleCalendarConfig)?.selectedCalendarIds || [],
-    icalUrl: (config as unknown as GoogleCalendarConfig)?.icalUrl,
-    period: (config as unknown as GoogleCalendarConfig)?.period || '1-day',
-    userEmail: (config as unknown as GoogleCalendarConfig)?.userEmail,
-    weekStart: (config as unknown as GoogleCalendarConfig)?.weekStart || 'monday',
-    cacheDuration: (config as unknown as GoogleCalendarConfig)?.cacheDuration ?? 3600,
-  };
+export function CalendarDashboardView({ config, debugEvents, frameId }: PluginComponentProps & { debugEvents?: CalendarEvent[] }) {
+  const calendarConfig: CalendarConfig = migrateConfig(config as unknown as any);
 
-  // Allow injecting events for debugging (when `debugEvents` is supplied we skip fetching)
-  const hookResult = useCalendarEvents(googleCalendarConfig, frameId);
+  const hookResult = useCalendarEvents(calendarConfig, frameId);
   const events = debugEvents ?? hookResult.events;
   const isLoading = debugEvents ? false : hookResult.isLoading;
   const error = debugEvents ? null : hookResult.error;
-  const [selectedEvent, setSelectedEvent] = useState<GoogleCalendarEvent | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -35,7 +25,6 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
   const containerRef = useRef<HTMLDivElement | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
 
-  // Register refresh function for Frame.tsx to call when refresh button is clicked
   useEffect(() => {
     if (frameId) {
       (globalThis as any)[`__pluginRefresh_${frameId}`] = hookResult.refresh;
@@ -45,10 +34,8 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
     }
   }, [frameId, hookResult.refresh]);
 
-  // Use auto-scroll hook
   useAutoScroll(isLoading, containerRef);
 
-  // Close popover when clicking outside
   useEffect(() => {
     if (!selectedEvent) return;
 
@@ -68,7 +55,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [selectedEvent]);
 
-  const handleEventClick = (event: GoogleCalendarEvent, buttonElement: HTMLButtonElement) => {
+  const handleEventClick = (event: CalendarEvent, buttonElement: HTMLButtonElement) => {
     if (selectedEvent?.id === event.id) {
       setSelectedEvent(null);
       setPopoverPosition(null);
@@ -77,47 +64,35 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
 
     setSelectedEvent(event);
 
-    // Calculate popover position (using getBoundingClientRect for portal)
     const rect = buttonElement.getBoundingClientRect();
-    const popoverWidth = 320; // w-80 = 320px
-    const popoverMaxHeight = window.innerHeight * 0.8; // max-h-[80vh]
+    const popoverWidth = 320;
+    const popoverMaxHeight = window.innerHeight * 0.8;
     const spacing = 8;
 
-    // Calculate horizontal position
     let left = rect.left;
-    // If popover would overflow on the right, align to the right of the button
     if (left + popoverWidth > window.innerWidth - 10) {
       left = rect.right - popoverWidth;
     }
-    // Ensure it doesn't overflow on the left
     left = Math.max(10, left);
 
-    // Calculate vertical position
     let top = rect.bottom + spacing;
-    // If popover would overflow at the bottom, position it above the button
     if (top + popoverMaxHeight > window.innerHeight - 10) {
       top = rect.top - popoverMaxHeight - spacing;
-      // If it would overflow at the top, center it vertically
       if (top < 10) {
         top = Math.max(10, (window.innerHeight - popoverMaxHeight) / 2);
       }
     }
 
-    setPopoverPosition({
-      top,
-      left,
-    });
+    setPopoverPosition({ top, left });
   };
 
-  // Navigation limits
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   let canGoPrev = true;
   let canGoNext = true;
 
-  if (googleCalendarConfig.period === 'month') {
-    // limit 3 months
+  if (calendarConfig.period === 'month') {
     const minDate = new Date(today);
     minDate.setMonth(minDate.getMonth() - 3);
     minDate.setDate(1);
@@ -133,7 +108,6 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
     canGoPrev = currentMonth.getTime() > minDate.getTime();
     canGoNext = currentMonth.getTime() < maxDate.getTime();
   } else {
-    // limit 14 days
     const minDate = new Date(today);
     minDate.setDate(minDate.getDate() - 14);
 
@@ -147,11 +121,10 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
     canGoNext = currentDay.getTime() < maxDate.getTime();
   }
 
-  // Navigation handlers
   const handlePrev = () => {
     if (!canGoPrev) return;
     const newDate = new Date(currentDate);
-    if (googleCalendarConfig.period === 'month') {
+    if (calendarConfig.period === 'month') {
       newDate.setMonth(newDate.getMonth() - 1);
     } else {
       newDate.setDate(newDate.getDate() - 1);
@@ -162,7 +135,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
   const handleNext = () => {
     if (!canGoNext) return;
     const newDate = new Date(currentDate);
-    if (googleCalendarConfig.period === 'month') {
+    if (calendarConfig.period === 'month') {
       newDate.setMonth(newDate.getMonth() + 1);
     } else {
       newDate.setDate(newDate.getDate() + 1);
@@ -170,26 +143,22 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
     setCurrentDate(newDate);
   };
 
-
-  // Auto-scroll to current time after events are loaded
   useEffect(() => {
     if (!containerRef.current || isLoading) return;
 
     const scrollToCurrentTime = () => {
       if (!containerRef.current) return;
 
-      // Only scroll if we are looking at TODAY (approx check)
       const now = new Date();
       if (currentDate.getDate() !== now.getDate() || currentDate.getMonth() !== now.getMonth()) {
         return;
       }
 
       const currentHour = now.getHours() + now.getMinutes() / 60;
-      const hourHeight = 60; // Each hour = 60px
-      const marginTop = 30; // Keep a small margin from the top
+      const hourHeight = 60;
+      const marginTop = 30;
       const timelineTop = timelineRef.current ? timelineRef.current.offsetTop : 0;
       const targetScrollTop = timelineTop + currentHour * hourHeight - marginTop;
-
 
       containerRef.current.scrollTo({
         top: Math.max(0, Math.min(targetScrollTop, containerRef.current.scrollHeight - containerRef.current.clientHeight)),
@@ -197,22 +166,15 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
       });
     };
 
-    // First attempt immediately after render
     scrollToCurrentTime();
-    // Second attempt after DOM/layout settles
     const timeoutId = setTimeout(scrollToCurrentTime, 0);
-    // Third attempt slightly later to override any layout jumps
     const timeoutId2 = setTimeout(scrollToCurrentTime, 400);
 
     return () => {
       clearTimeout(timeoutId);
       clearTimeout(timeoutId2);
     };
-  }, [isLoading, events.length, googleCalendarConfig.period, currentDate]);
-
-
-
-
+  }, [isLoading, events.length, calendarConfig.period, currentDate]);
 
   if (isLoading) {
     return (
@@ -222,21 +184,24 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
     );
   }
 
-  const authType = googleCalendarConfig.authType || (googleCalendarConfig.accessToken ? 'oauth' : 'ical');
-  const isConfigured = authType === 'oauth'
-    ? (googleCalendarConfig.accessToken && googleCalendarConfig.selectedCalendarIds && googleCalendarConfig.selectedCalendarIds.length > 0)
-    : !!googleCalendarConfig.icalUrl;
+  const isConfigured = calendarConfig.sources && calendarConfig.sources.length > 0;
 
   if (error || !isConfigured) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-4 text-center text-sm text-muted-foreground">
         <AlertCircle className="w-6 h-6 text-destructive mb-2" />
-        <p>{error || 'Google Calendar not configured.'}</p>
+        <p>{error || 'Calendar not configured.'}</p>
       </div>
     );
   }
 
-  const days = getDaysForPeriod(googleCalendarConfig.period, currentDate);
+  // Collect all userEmails from sources for RSVP detection
+  const userEmails = calendarConfig.sources
+    .map((s) => s.userEmail)
+    .filter(Boolean) as string[];
+  const userEmail = userEmails[0];
+
+  const days = getDaysForPeriod(calendarConfig.period, currentDate);
   const eventsByDay = groupEventsByDay(events);
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -245,25 +210,23 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
       <div ref={containerRef} className="h-full overflow-y-auto">
         <div className="h-full p-2 box-border">
           {/* Month view */}
-          {googleCalendarConfig.period === 'month' ? (() => {
-            const weeks = getMonthGrid(currentDate, googleCalendarConfig.weekStart === 'monday');
+          {calendarConfig.period === 'month' ? (() => {
+            const weeks = getMonthGrid(currentDate, calendarConfig.weekStart === 'monday');
 
-            // Build weekday labels according to week start
             const weekdayLabels = (() => {
               const labels: string[] = [];
               for (let i = 0; i < 7; i++) {
-                const dayIndex = (googleCalendarConfig.weekStart === 'monday') ? ((i + 1) % 7) : i;
+                const dayIndex = calendarConfig.weekStart === 'monday' ? (i + 1) % 7 : i;
                 const d = new Date(2020, 0, 5 + dayIndex);
                 labels.push(d.toLocaleDateString(undefined, { weekday: 'short' }));
               }
               return labels;
             })();
 
-            // Current Day check helpers
-            const today = new Date();
-            const currentYear = today.getFullYear();
-            const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
-            const currentDateStr = String(today.getDate()).padStart(2, '0');
+            const todayDate = new Date();
+            const currentYear = todayDate.getFullYear();
+            const currentMonth = String(todayDate.getMonth() + 1).padStart(2, '0');
+            const currentDateStr = String(todayDate.getDate()).padStart(2, '0');
             const todayKey = `${currentYear}-${currentMonth}-${currentDateStr}`;
 
             return (
@@ -272,20 +235,16 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
                   {canGoPrev ? (
                     <button onClick={handlePrev} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronLeft className="w-4 h-4" /></button>
                   ) : <div className="w-6 h-6" />}
-
                   {currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-
                   {canGoNext ? (
                     <button onClick={handleNext} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronRight className="w-4 h-4" /></button>
                   ) : <div className="w-6 h-6" />}
-
                 </div>
                 <div className="grid grid-cols-7 gap-2 mb-3 text-center">
                   {weekdayLabels.map((label, idx) => (
                     <div key={idx} className="text-sm font-semibold">{label}</div>
                   ))}
                 </div>
-
                 <div className="grid grid-cols-7 gap-2">
                   {weeks.flat().map((day) => {
                     const year = day.getFullYear();
@@ -297,7 +256,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
                     const isToday = dayKey === todayKey;
 
                     return (
-                      <div key={dayKey} className={`min-h-[80px] border rounded p-2 bg-card ${isToday ? 'border-blue-500' : ''}  ${isCurrentMonth ? '' : 'opacity-50'}`}>
+                      <div key={dayKey} className={`min-h-[80px] border rounded p-2 bg-card ${isToday ? 'border-blue-500' : ''} ${isCurrentMonth ? '' : 'opacity-50'}`}>
                         <div className={`text-xs mb-2 ${isToday ? 'text-blue-500 font-bold' : 'text-muted-foreground'}`}>{date}</div>
                         <div className="space-y-1">
                           {dayEvents.map((event) => (
@@ -326,16 +285,14 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
           })() : (
             /* Timeline and Events grid */
             <div className="grid gap-4 w-full box-border" style={{ gridTemplateColumns: `60px repeat(${days.length}, 1fr)` }}>
-              {/* Header Row */}
               <div className="col-start-1 flex items-center justify-center gap-1">
                 {canGoPrev ? (
                   <button onClick={handlePrev} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronLeft className="w-4 h-4" /></button>
                 ) : <div className="w-6 h-6" />}
-                
                 {canGoNext ? (
                   <button onClick={handleNext} className="p-1 hover:bg-accent rounded-full text-muted-foreground transition-colors"><ChevronRight className="w-4 h-4" /></button>
                 ) : <div className="w-6 h-6" />}
-              </div> {/* Spacer for timeline */}
+              </div>
               {days.map((day) => (
                 <div key={day.toISOString()} className="text-center font-semibold mb-2">
                   <div className="text-sm text-muted-foreground">{day.toLocaleDateString(undefined, { weekday: 'short' })}</div>
@@ -343,12 +300,9 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
                 </div>
               ))}
 
-              {/* Timeline column */}
               <Timeline hours={hours} />
 
-              {/* Day columns with events */}
               {days.map((day) => {
-                // Format date as YYYY-MM-DD in local timezone
                 const year = day.getFullYear();
                 const month = String(day.getMonth() + 1).padStart(2, '0');
                 const date = String(day.getDate()).padStart(2, '0');
@@ -360,7 +314,7 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
                     key={dayKey}
                     dayKey={dayKey}
                     events={dayEvents}
-                    userEmail={googleCalendarConfig.userEmail}
+                    userEmail={userEmail}
                     hours={hours}
                     onEventClick={handleEventClick}
                     eventRefs={eventRefs}
@@ -372,7 +326,6 @@ export function GoogleCalendarDashboardView({ config, debugEvents, frameId }: Pl
         </div>
       </div>
 
-      {/* Event details popover */}
       {selectedEvent && popoverPosition && (
         <EventPopover
           event={selectedEvent}

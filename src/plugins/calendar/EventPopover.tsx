@@ -1,11 +1,11 @@
 import { Calendar, CheckCircle2, Circle, Clock, HelpCircle, Link as LinkIcon, MapPin, Users, X, XCircle } from 'lucide-react';
 import { formatTime, getStatusIcon } from './utils';
 
-import { GoogleCalendarEvent } from './types';
+import { CalendarEvent } from './types';
 import { createPortal } from 'react-dom';
 
 interface EventPopoverProps {
-  event: GoogleCalendarEvent;
+  event: CalendarEvent;
   position: { top: number; left: number };
   onClose: () => void;
   popoverRef: React.RefObject<HTMLDivElement>;

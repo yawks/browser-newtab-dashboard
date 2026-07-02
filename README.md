@@ -162,6 +162,28 @@ Display a configurable clock with analog and digital themes.
 - Time format: 12h or 24h
 - Sunrise/Sunset: on/off (requires latitude/longitude to compute times)
 
+### 8. Calendar
+
+Display events from one or more calendars — mix Google Calendar (OAuth) and public iCal feeds in a single widget.
+
+**Features:**
+- Multiple calendar sources (Google OAuth + iCal URLs combined in the same widget)
+- Timeline view: 1-day, 3-days, 5-days, week
+- Month grid view
+- Navigation (previous / next day or month)
+- Event detail popover (attendees, organizer, location, link)
+- RSVP status display (accepted / declined / tentative)
+- Configurable week start (Monday or Sunday)
+- Per-source caching with configurable TTL
+
+**Configuration:**
+- Sources: add/remove Google Calendar (OAuth) or iCal URL sources freely
+- Period: 1-day, 3-days, 5-days, week, month
+- Week starts on: Monday or Sunday
+- Cache duration
+
+**Note:** Google OAuth requires a `VITE_GOOGLE_CLIENT_ID` environment variable. See `GOOGLE_CALENDAR_SETUP.md` for setup instructions. iCal URLs must be publicly accessible.
+
 ## Installation
 
 ### For Development

@@ -4,9 +4,10 @@ import { BookmarksPlugin } from '@/plugins/bookmarks/BookmarksPlugin';
 import { NextcloudBookmarksPlugin } from '@/plugins/nextcloud-bookmarks/NextcloudBookmarksPlugin';
 import { ClockPlugin } from '@/plugins/clock/ClockPlugin';
 import { FinancePlugin } from '@/plugins/finance/FinancePlugin';
-import { GoogleCalendarPlugin } from '@/plugins/googlecalendar/GoogleCalendarPlugin';
+import { CalendarPlugin } from '@/plugins/calendar/CalendarPlugin';
 import { MeteoPlugin } from '@/plugins/meteo/MeteoPlugin';
 import { TasktrovePlugin } from '@/plugins/tasktrove/TasktrovePlugin';
+import { VikunjaPlugin } from '@/plugins/vikunja/VikunjaPlugin';
 import { YoutrackPlugin } from '@/plugins/youtrack/YoutrackPlugin';
 import { LiteFeedPlugin } from '@/plugins/lite-feed/LiteFeedPlugin';
 
@@ -18,9 +19,10 @@ class PluginRegistry {
     this.registerPlugin(NextcloudBookmarksPlugin);
     this.registerPlugin(YoutrackPlugin);
     this.registerPlugin(TasktrovePlugin);
+    this.registerPlugin(VikunjaPlugin);
     this.registerPlugin(MeteoPlugin);
     this.registerPlugin(FinancePlugin);
-    this.registerPlugin(GoogleCalendarPlugin);
+    this.registerPlugin(CalendarPlugin);
     this.registerPlugin(ClockPlugin);
     this.registerPlugin(LiteFeedPlugin);
   }
