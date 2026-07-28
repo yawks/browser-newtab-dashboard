@@ -8,6 +8,7 @@ import { CalendarPlugin } from '@/plugins/calendar/CalendarPlugin';
 import { MeteoPlugin } from '@/plugins/meteo/MeteoPlugin';
 import { TasktrovePlugin } from '@/plugins/tasktrove/TasktrovePlugin';
 import { VikunjaPlugin } from '@/plugins/vikunja/VikunjaPlugin';
+import { TududiPlugin } from '@/plugins/tududi/TududiPlugin';
 import { YoutrackPlugin } from '@/plugins/youtrack/YoutrackPlugin';
 import { LiteFeedPlugin } from '@/plugins/lite-feed/LiteFeedPlugin';
 
@@ -20,6 +21,7 @@ class PluginRegistry {
     this.registerPlugin(YoutrackPlugin);
     this.registerPlugin(TasktrovePlugin);
     this.registerPlugin(VikunjaPlugin);
+    this.registerPlugin(TududiPlugin);
     this.registerPlugin(MeteoPlugin);
     this.registerPlugin(FinancePlugin);
     this.registerPlugin(CalendarPlugin);
