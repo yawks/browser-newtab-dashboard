@@ -9,9 +9,18 @@ interface TududiConfigModalProps {
   config: TududiConfig;
   onSave: (config: TududiConfig) => void;
   onClose: () => void;
+  serviceName?: string;
+  endpointPlaceholder?: string;
+  tokenHelp?: string;
+  fetchProjects?: typeof fetchTududiProjects;
+  fetchTags?: typeof fetchTududiTags;
 }
 
-export function TududiConfigModal({ config, onSave, onClose }: TududiConfigModalProps) {
+export function TududiConfigModal({
+  config, onSave, onClose, serviceName = 'Tududi',
+  endpointPlaceholder = 'https://tududi.example.com/api/v1',
+  tokenHelp, fetchProjects = fetchTududiProjects, fetchTags = fetchTududiTags,
+}: TududiConfigModalProps) {
   const [apiEndpoint, setApiEndpoint] = useState(config?.apiEndpoint || '');
   const [apiToken, setApiToken] = useState(config?.apiToken || '');
   const [statusFilter, setStatusFilter] = useState<TududiStatusFilter>(config?.statusFilter || null);
@@ -40,8 +49,8 @@ export function TududiConfigModal({ config, onSave, onClose }: TududiConfigModal
 
       try {
         const [fetchedProjects, fetchedTags] = await Promise.all([
-          fetchTududiProjects({ apiEndpoint, apiToken }),
-          fetchTududiTags({ apiEndpoint, apiToken }),
+          fetchProjects({ apiEndpoint, apiToken }),
+          fetchTags({ apiEndpoint, apiToken }),
         ]);
         setProjects(fetchedProjects);
         setTags(fetchedTags);
@@ -56,7 +65,7 @@ export function TududiConfigModal({ config, onSave, onClose }: TududiConfigModal
     };
 
     loadData();
-  }, [apiEndpoint, apiToken]);
+  }, [apiEndpoint, apiToken, fetchProjects, fetchTags]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -122,7 +131,7 @@ export function TududiConfigModal({ config, onSave, onClose }: TududiConfigModal
     >
       <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md shadow-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Configure Tududi</h2>
+          <h2 className="text-xl font-semibold">Configure {serviceName}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="w-5 h-5" />
           </button>
@@ -138,7 +147,7 @@ export function TududiConfigModal({ config, onSave, onClose }: TududiConfigModal
               type="text"
               value={apiEndpoint}
               onChange={(e) => setApiEndpoint(e.target.value)}
-              placeholder="https://tududi.example.com/api/v1"
+              placeholder={endpointPlaceholder}
               className="w-full px-3 py-2 border border-input rounded-md bg-background"
             />
           </div>
@@ -155,6 +164,7 @@ export function TududiConfigModal({ config, onSave, onClose }: TududiConfigModal
               placeholder="Enter your API token"
               className="w-full px-3 py-2 border border-input rounded-md bg-background"
             />
+            {tokenHelp && <p className="text-xs text-muted-foreground mt-2">{tokenHelp}</p>}
           </div>
 
           <div className="border-t border-border pt-4 space-y-4">

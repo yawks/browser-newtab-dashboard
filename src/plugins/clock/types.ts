@@ -13,6 +13,7 @@ export interface ClockConfig {
   theme: ClockTheme;
   timezone?: string; // IANA timezone (e.g., 'Europe/Paris', 'America/New_York')
   showDate: boolean;
+  showWeekNumber?: boolean;
   format: ClockFormat;
   showSunrise: boolean;
   showSunset: boolean;
@@ -22,9 +23,9 @@ export interface ClockConfig {
 }
 
 export interface SunTimes {
+  dawn: string;
+  dusk: string;
   sunrise: string; // ISO 8601 format
   sunset: string; // ISO 8601 format
 }
-
-
 

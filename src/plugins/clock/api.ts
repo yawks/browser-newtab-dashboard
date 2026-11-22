@@ -1,9 +1,7 @@
 import { SunTimes } from './types';
 import { loadFromCache, saveToCache } from '@/lib/cache';
 
-interface CachedSunTimes {
-  sunrise: string;
-  sunset: string;
+interface CachedSunTimes extends SunTimes {
   date: string; // YYYY-MM-DD format
   latitude: number;
   longitude: number;
@@ -17,19 +15,19 @@ interface CachedSunTimes {
 export async function fetchSunTimes(
   latitude: number,
   longitude: number,
+  dateStr: string,
   frameId?: string,
   cacheDuration?: number
 ): Promise<SunTimes> {
-  const today = new Date();
-  const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
-
   // Check generic cache first if frameId is provided
   if (frameId && cacheDuration) {
     const cached = await loadFromCache<CachedSunTimes>(frameId, cacheDuration);
-    if (cached && cached.date === dateStr && cached.latitude === latitude && cached.longitude === longitude) {
+    if (cached?.dawn && cached.dusk && cached.date === dateStr && cached.latitude === latitude && cached.longitude === longitude) {
       return {
         sunrise: cached.sunrise,
         sunset: cached.sunset,
+        dawn: cached.dawn,
+        dusk: cached.dusk,
       };
     }
   }
@@ -52,14 +50,18 @@ export async function fetchSunTimes(
     const sunTimes: SunTimes = {
       sunrise: data.results.sunrise,
       sunset: data.results.sunset,
+      dawn: data.results.civil_twilight_begin,
+      dusk: data.results.civil_twilight_end,
     };
+    if (![sunTimes.sunrise, sunTimes.sunset].every(value => Date.parse(value) > 0)) {
+      throw new Error('Sunrise or sunset unavailable for this date');
+    }
 
     // Cache the result with generic cache if frameId is provided
     if (frameId) {
       try {
         const cacheData: CachedSunTimes = {
-          sunrise: sunTimes.sunrise,
-          sunset: sunTimes.sunset,
+          ...sunTimes,
           date: dateStr,
           latitude,
           longitude,
@@ -110,6 +112,5 @@ export function getTimezoneDisplayName(timezone: string): string {
     return timezone;
   }
 }
-
 
 

@@ -2,6 +2,9 @@
   "manifest_version": 3,
   "name": "Dashboard New Tab",
   "version": "1.0.3",
+  "browser_specific_settings": {
+    "gecko": { "id": "browser-newtab-dashboard@local.invalid" }
+  },
   "description": "A customizable dashboard",
   "permissions": ["storage", "identity"],
   "host_permissions": ["http://*/*", "https://*/*"],
@@ -22,4 +25,3 @@
     }
   ]
 }
-

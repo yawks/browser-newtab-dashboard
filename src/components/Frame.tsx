@@ -37,7 +37,7 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
 
   if (!plugin) {
     return (
-      <div className="w-full h-full bg-card border border-border rounded-lg p-4">
+      <div className="dashboard-frame w-full h-full bg-card rounded-lg p-4">
         <p className="text-muted-foreground">Plugin not found: {frame.pluginId}</p>
       </div>
     );
@@ -113,11 +113,11 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
 
   return (
     <div
-      className="w-full h-full bg-card border border-border rounded-lg overflow-hidden relative flex flex-col"
+      className="dashboard-frame w-full h-full bg-card rounded-lg overflow-hidden relative flex flex-col"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="drag-handle flex items-center justify-between px-2 py-1 border-b border-border bg-muted/50">
+      <div className="drag-handle flex items-center justify-between px-3 py-2 text-muted-foreground shrink-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {plugin.IconComponent && (
             <plugin.IconComponent className="w-3 h-3 text-muted-foreground flex-shrink-0" />
@@ -205,9 +205,8 @@ export function Frame({ frame, onDelete, onConfigChange, onNameChange, onNsfwTog
       </div>
 
       <div 
-        className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
+        className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-2 pb-2 pt-1"
         style={{ 
-          height: 'calc(100% - 28px)',
           position: 'relative'
         }}
         onMouseDown={(e) => {

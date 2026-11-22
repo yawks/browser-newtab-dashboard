@@ -9,7 +9,9 @@ import { MeteoPlugin } from '@/plugins/meteo/MeteoPlugin';
 import { TasktrovePlugin } from '@/plugins/tasktrove/TasktrovePlugin';
 import { VikunjaPlugin } from '@/plugins/vikunja/VikunjaPlugin';
 import { TududiPlugin } from '@/plugins/tududi/TududiPlugin';
+import { OpenTodoPlugin } from '@/plugins/open-todo/OpenTodoPlugin';
 import { YoutrackPlugin } from '@/plugins/youtrack/YoutrackPlugin';
+import { JiraPlugin } from '@/plugins/jira/JiraPlugin';
 import { LiteFeedPlugin } from '@/plugins/lite-feed/LiteFeedPlugin';
 
 class PluginRegistry {
@@ -19,14 +21,20 @@ class PluginRegistry {
     this.registerPlugin(BookmarksPlugin);
     this.registerPlugin(NextcloudBookmarksPlugin);
     this.registerPlugin(YoutrackPlugin);
+    this.registerPlugin(JiraPlugin);
     this.registerPlugin(TasktrovePlugin);
     this.registerPlugin(VikunjaPlugin);
     this.registerPlugin(TududiPlugin);
+    this.registerPlugin(OpenTodoPlugin);
     this.registerPlugin(MeteoPlugin);
     this.registerPlugin(FinancePlugin);
     this.registerPlugin(CalendarPlugin);
     this.registerPlugin(ClockPlugin);
     this.registerPlugin(LiteFeedPlugin);
+    const localPlugins = import.meta.glob<Plugin>('../plugins/private/*/plugin.tsx', {
+      eager: true, import: 'default',
+    });
+    Object.values(localPlugins).forEach(plugin => this.registerPlugin(plugin));
   }
 
   registerPlugin(plugin: Plugin): void {
@@ -47,4 +55,3 @@ class PluginRegistry {
 }
 
 export const pluginRegistry = new PluginRegistry();
-

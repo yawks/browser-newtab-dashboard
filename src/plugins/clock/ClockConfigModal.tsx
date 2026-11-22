@@ -45,6 +45,7 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
   const [theme, setTheme] = useState<ClockTheme>(config.theme || 'digital-simple');
   const [timezone, setTimezone] = useState<string>(config.timezone || '');
   const [showDate, setShowDate] = useState(config.showDate !== false);
+  const [showWeekNumber, setShowWeekNumber] = useState(config.showWeekNumber ?? false);
   const [format, setFormat] = useState<ClockFormat>(config.format || '24h');
   const [showSunrise, setShowSunrise] = useState(config.showSunrise || false);
   const [showSunset, setShowSunset] = useState(config.showSunset || false);
@@ -95,6 +96,7 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
       theme,
       timezone: timezone || undefined,
       showDate,
+      showWeekNumber,
       format,
       showSunrise,
       showSunset,
@@ -142,6 +144,7 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
                 theme,
                 timezone: timezone || undefined,
                 showDate,
+                showWeekNumber,
                 format,
                 showSunrise,
                 showSunset,
@@ -276,6 +279,12 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
             />
           </div>
 
+          <label className="flex items-center justify-between text-sm font-medium">
+            Show ISO Week Number
+            <input type="checkbox" checked={showWeekNumber}
+              onChange={(e) => setShowWeekNumber(e.target.checked)} className="w-4 h-4" />
+          </label>
+
           {/* Time Format */}
           <div>
             <label className="text-sm font-medium mb-2 block">Time Format</label>
@@ -406,6 +415,5 @@ export function ClockConfigModal({ config, onSave, onClose }: ClockConfigModalPr
     ? createPortal(modalContent, document.body)
     : null;
 }
-
 
 

@@ -571,7 +571,7 @@ export function DashboardContent({ initialData }: DashboardContentProps) {
       />
 
       {/* Floating settings button */}
-      <div className="fixed top-2 right-2 z-50">
+      <div className="fixed top-2 right-3 z-50">
         <SettingsMenu 
           onAddWidget={() => setShowPluginSelector(true)}
           onExport={handleExport}
@@ -582,7 +582,7 @@ export function DashboardContent({ initialData }: DashboardContentProps) {
         />
       </div>
 
-      <div className={`p-2 transition-opacity duration-300 ${isTransitioning ? 'opacity-50' : 'opacity-100'}`}>
+      <div className={`px-3 sm:px-6 pb-6 ${spaces.length <= 1 ? 'pt-12' : 'pt-1'} transition-opacity duration-300 ${isTransitioning ? 'opacity-50' : 'opacity-100'}`}>
         {isEmpty ? (
           <EmptyDashboard onAddWidget={() => setShowPluginSelector(true)} />
         ) : (

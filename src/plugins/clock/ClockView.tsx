@@ -1,7 +1,21 @@
 import { fetchSunTimes, getSystemTimezone, getTimezoneDisplayName } from './api';
-import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Loader2, Sunrise, Sunset } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { SolarRibbon } from './SolarRibbon';
 import { ClockConfig, SunTimes } from './types';
+
+function formatWeek(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, year: 'numeric', month: 'numeric', day: 'numeric',
+  }).formatToParts(date);
+  const value = (key: string) => Number(parts.find(part => part.type === key)?.value);
+  const thursday = new Date(Date.UTC(value('year'), value('month') - 1, value('day')));
+  // The Thursday determines the ISO week-year, including at New Year.
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - (thursday.getUTCDay() || 7));
+  const week = 1 + Math.floor((thursday.getTime() - Date.UTC(thursday.getUTCFullYear(), 0, 1)) / 604800000);
+  const label = new Intl.DateTimeFormat().resolvedOptions().locale.startsWith('fr') ? 'Semaine' : 'Week';
+  return `${label} ${week}`;
+}
 
 // Digital clock components
 function DigitalSimple({ time, date, timezone }: { time: string; date: string; timezone?: string }) {
@@ -215,6 +229,10 @@ export function ClockView({clockConfig, frameId}: ClockViewProps) {
 
     // Get timezone
     const timezone = clockConfig.timezone || getSystemTimezone();
+    const dayFormatter = useMemo(() => new Intl.DateTimeFormat('sv-SE', {
+      timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }), [timezone]);
+    const solarDate = dayFormatter.format(currentTime);
     const timezoneDisplay = clockConfig.timezone ? getTimezoneDisplayName(clockConfig.timezone) : undefined;
 
     // Format time based on format preference
@@ -259,24 +277,30 @@ export function ClockView({clockConfig, frameId}: ClockViewProps) {
 
     // Fetch sun times if needed
     useEffect(() => {
-      if ((clockConfig.showSunrise || clockConfig.showSunset) && clockConfig.latitude && clockConfig.longitude) {
+      let active = true;
+      if ((clockConfig.showSunrise || clockConfig.showSunset) && typeof clockConfig.latitude === 'number' && Number.isFinite(clockConfig.latitude) && typeof clockConfig.longitude === 'number' && Number.isFinite(clockConfig.longitude)) {
         setIsLoadingSun(true);
         setSunError(null);
 
-        fetchSunTimes(clockConfig.latitude, clockConfig.longitude, frameId, clockConfig.cacheDuration)
+        fetchSunTimes(clockConfig.latitude, clockConfig.longitude, solarDate, frameId, clockConfig.cacheDuration)
           .then((times) => {
+            if (!active) return;
             setSunTimes(times);
             setIsLoadingSun(false);
           })
           .catch((err) => {
+            if (!active) return;
             console.error('Failed to fetch sun times:', err);
             setSunError('Failed to load sun times');
             setIsLoadingSun(false);
           });
       } else {
         setSunTimes(null);
+        setSunError(null);
+        setIsLoadingSun(false);
       }
-    }, [clockConfig.showSunrise, clockConfig.showSunset, clockConfig.latitude, clockConfig.longitude, frameId, clockConfig.cacheDuration]);
+      return () => { active = false; };
+    }, [solarDate, clockConfig.showSunrise, clockConfig.showSunset, clockConfig.latitude, clockConfig.longitude, frameId, clockConfig.cacheDuration]);
 
     // Format sun time for display
     const formatSunTime = (isoString: string): string => {
@@ -311,7 +335,10 @@ export function ClockView({clockConfig, frameId}: ClockViewProps) {
     };
 
     const timeString = formatTime(currentTime);
-    const dateString = clockConfig.showDate ? formatDate(currentTime) : '';
+    const dateString = [
+      clockConfig.showDate && formatDate(currentTime),
+      clockConfig.showWeekNumber && formatWeek(currentTime, timezone),
+    ].filter(Boolean).join(' · ');
     const analogTime = getTimeInTimezone(currentTime, timezone);
 
     // Render based on theme
@@ -346,7 +373,7 @@ export function ClockView({clockConfig, frameId}: ClockViewProps) {
     return (
       <div className="h-full flex flex-col overflow-hidden p-2">
         {/* Main clock display */}
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 min-h-0 flex items-center justify-center">
           {renderClock()}
         </div>
 
@@ -363,20 +390,9 @@ export function ClockView({clockConfig, frameId}: ClockViewProps) {
               </div>
             )}
             {sunTimes && !isLoadingSun && !sunError && (
-              <>
-                {clockConfig.showSunrise && (
-                  <div className="flex items-center gap-1">
-                    <Sunrise className="w-3 h-3" />
-                    <span>{formatSunTime(sunTimes.sunrise)}</span>
-                  </div>
-                )}
-                {clockConfig.showSunset && (
-                  <div className="flex items-center gap-1">
-                    <Sunset className="w-3 h-3" />
-                    <span>{formatSunTime(sunTimes.sunset)}</span>
-                  </div>
-                )}
-              </>
+              <SolarRibbon times={sunTimes} timezone={timezone} now={currentTime}
+                showSunrise={clockConfig.showSunrise} showSunset={clockConfig.showSunset}
+                formatTime={formatSunTime} />
             )}
           </div>
         )}

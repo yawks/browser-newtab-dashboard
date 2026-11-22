@@ -31,6 +31,16 @@ The extension uses a plugin-based architecture, making it easy to add new widget
 
 ## Available Widgets
 
+### Open Todo
+
+View and manage tasks from your [OpenTodo](https://open-todo.app/) instance with the same interface as Tududi.
+
+- Toggle task completion; display due dates, priorities, subtask progress, tags and projects.
+- Filter by status (Today, Upcoming, Completed, Uncompleted), projects and tags.
+- Configurable cache, automatic checks every 5 minutes and manual refresh.
+
+**Configuration:** Enter your instance URL (or its `/api/v1` endpoint) and an API token created in **Settings → Integrations → API tokens**. Choose **Full** access to complete and reopen tasks; read-only tokens can only display tasks. OpenTodo priorities 1–3 appear as High, Medium and Low; priority 4 is the default (no badge).
+
 ### 1. Bookmarks
 
 A powerful bookmark manager with icon support.
@@ -401,4 +411,3 @@ This project is licensed under the MIT License.
 ## Support
 
 For issues, questions, or feature requests, please open an issue on the repository.
-

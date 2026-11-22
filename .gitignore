@@ -8,6 +8,7 @@ node_modules/
 coverage/
 
 # Production
+/src/plugins/private/
 dist/
 build/
 

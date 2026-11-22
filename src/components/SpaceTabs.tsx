@@ -12,25 +12,27 @@ export function SpaceTabs({ spaces, activeSpaceId, onSpaceSelect }: SpaceTabsPro
   }
 
   return (
-    <div className="flex gap-1 px-2 pt-2 border-b border-border bg-muted/30">
+    <div className="flex flex-wrap gap-1 pl-5 sm:pl-8 pt-2 pr-16">
       {spaces.map((space) => {
         const isActive = space.id === activeSpaceId;
         return (
-          <div
+          <button
+            type="button"
+            aria-pressed={isActive}
             key={space.id}
             className={`
-              flex items-center gap-2 px-4 py-2 rounded-t-lg cursor-pointer transition-all duration-200
-              ${isActive 
-                ? 'bg-card border-t border-l border-r border-border shadow-sm' 
-                : 'bg-muted/50 hover:bg-muted border-t border-l border-r border-transparent hover:border-border'
+              flex items-center gap-2 px-3 py-1.5 rounded-full cursor-pointer transition-colors duration-200
+              ${isActive
+                ? 'bg-accent text-accent-foreground'
+                : 'bg-transparent hover:bg-muted'
               }
             `}
             onClick={() => onSpaceSelect(space.id)}
           >
-            <span className={`text-sm font-medium ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+            <span className={`text-sm font-medium ${isActive ? 'text-accent-foreground' : 'text-muted-foreground'}`}>
               {space.name}
             </span>
-          </div>
+          </button>
         );
       })}
     </div>

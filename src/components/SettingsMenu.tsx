@@ -145,14 +145,14 @@ export function SettingsMenu({ onAddWidget, onExport, onImport, spaces = [], onS
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="p-1.5 rounded-full bg-card border-2 border-primary/30 shadow-lg hover:bg-primary/10 hover:border-primary/50 transition-colors dark:border-primary/40 dark:hover:border-primary/60"
+        className="p-2.5 rounded-full bg-card shadow-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
         aria-label="Settings"
       >
-        <Settings className="w-3.5 h-3.5 text-primary" />
+        <Settings className="w-4 h-4" />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-64 bg-popover border border-border rounded-md shadow-lg z-50">
+        <div className="absolute right-0 top-full mt-2 w-64 bg-popover border border-border/50 rounded-lg shadow-lg z-50">
           <div className="p-1">
             {!showSpaces ? (
               <>

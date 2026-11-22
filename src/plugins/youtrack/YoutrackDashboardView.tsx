@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { PluginComponentProps } from '@/types/plugin';
 import { fetchYoutrackIssues } from './api';
+import { getTagColor } from '@/lib/tag-color';
 
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -63,25 +64,6 @@ function getIssueIcon(issue: YoutrackIssue) {
 
   // Default to task
   return <CheckSquare className="w-4 h-4" />;
-}
-
-function getTagColor(tagName: string): string {
-  // Generate a consistent color based on tag name
-  const colors = [
-    'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30',
-    'bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30',
-    'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30',
-    'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30',
-    'bg-red-500/20 text-red-700 dark:text-red-300 border-red-500/30',
-    'bg-orange-500/20 text-orange-700 dark:text-orange-300 border-orange-500/30',
-    'bg-pink-500/20 text-pink-700 dark:text-pink-300 border-pink-500/30',
-    'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
-  ];
-  let hash = 0;
-  for (let i = 0; i < tagName.length; i++) {
-    hash = tagName.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
 }
 
 export function YoutrackDashboardView({ config, frameId }: PluginComponentProps) {
@@ -259,4 +241,3 @@ export function YoutrackDashboardView({ config, frameId }: PluginComponentProps)
     </div>
   );
 }
-

@@ -14,15 +14,15 @@ export function BookmarksDashboardView({ config }: PluginComponentProps) {
   }
 
   return (
-    <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 w-full">
+    <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 w-full">
       {bookmarks.map((bookmark, _) => {
         return (
         <a
           key={bookmark.id}
           href={bookmark.url}
-          className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-accent transition-colors group"
+          className="flex flex-col items-center gap-2 p-2 rounded-lg hover:bg-accent transition-colors group"
         >
-          <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-card border border-border">
+          <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
             {bookmark.icon ? (
               <img
                 src={bookmark.icon}
